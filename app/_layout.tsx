@@ -17,6 +17,34 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen 
+          name="auth/GoogleAuthScreen" 
+          options={{ 
+            headerShown: false,
+            title: 'Sign In'
+          }} 
+        />
+        <Stack.Screen 
+          name="auth/LoginScreen" 
+          options={{ 
+            headerShown: false,
+            title: 'Email Sign In'
+          }} 
+        />
+        <Stack.Screen 
+          name="auth/SignupScreen" 
+          options={{ 
+            headerShown: false,
+            title: 'Sign Up'
+          }} 
+        />
+        <Stack.Screen 
+          name="auth/ProfileSetupScreen" 
+          options={{ 
+            headerShown: false,
+            title: 'Complete Profile'
+          }} 
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

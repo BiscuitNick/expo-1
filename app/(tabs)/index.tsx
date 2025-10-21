@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
 
 import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 
 export default function HomeScreen() {
   return (
@@ -65,14 +65,36 @@ export default function HomeScreen() {
         </ThemedText>
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
+        <ThemedText type="subtitle">Step 3: Test Authentication</ThemedText>
         <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
+          Test the authentication screens we just created:
         </ThemedText>
+        <ThemedView style={styles.authButtons}>
+          <TouchableOpacity 
+            style={styles.authButton}
+            onPress={() => router.push('/auth/GoogleAuthScreen')}
+          >
+            <ThemedText style={styles.authButtonText}>Test Google Auth (Primary)</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.authButton}
+            onPress={() => router.push('/auth/LoginScreen')}
+          >
+            <ThemedText style={styles.authButtonText}>Test Email Login</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.authButton}
+            onPress={() => router.push('/auth/SignupScreen')}
+          >
+            <ThemedText style={styles.authButtonText}>Test Email Signup</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.authButton}
+            onPress={() => router.push('/auth/ProfileSetupScreen')}
+          >
+            <ThemedText style={styles.authButtonText}>Test Profile Setup</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
       </ThemedView>
     </ParallaxScrollView>
   );
@@ -94,5 +116,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
+  },
+  authButtons: {
+    gap: 12,
+    marginTop: 12,
+  },
+  authButton: {
+    backgroundColor: '#007AFF',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  authButtonText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });

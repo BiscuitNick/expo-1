@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.expo-1"
     },
     "android": {
       "adaptiveIcon": {
@@ -43,6 +44,14 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "firebaseApiKey": "AIzaSyDGPq8rBgy2_tE5u2PtLK5X5UDrMt81ges",
+      "firebaseAuthDomain": "messageai-expo.firebaseapp.com",
+      "firebaseProjectId": "messageai-expo",
+      "firebaseStorageBucket": "messageai-expo.firebasestorage.app",
+      "firebaseMessagingSenderId": "995887465511",
+      "firebaseAppId": "1:995887465511:web:889e33faa9ae2fbc1d7a02"
     }
   }
 }
