@@ -2,6 +2,7 @@
   "expo": {
     "name": "expo-1",
     "slug": "expo-1",
+    "owner": "anonymous",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,7 +11,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.messageai.expo"
+      "bundleIdentifier": "com.messageai.expo",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "package": "com.messageai.expo",
@@ -45,14 +47,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "firebaseApiKey": "AIzaSyDGPq8rBgy2_tE5u2PtLK5X5UDrMt81ges",
-      "firebaseAuthDomain": "messageai-expo.firebaseapp.com",
-      "firebaseProjectId": "messageai-expo",
-      "firebaseStorageBucket": "messageai-expo.firebasestorage.app",
-      "firebaseMessagingSenderId": "995887465511",
-      "firebaseAppId": "1:995887465511:web:889e33faa9ae2fbc1d7a02"
     }
   }
 }

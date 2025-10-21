@@ -1,19 +1,29 @@
 import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
+import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+// Complete auth session on web when the redirect happens
+if (Platform.OS === 'web') {
+  WebBrowser.maybeCompleteAuthSession();
+}
+
 // Google OAuth configuration
-// NOTE: For expo-auth-session OAuth flow, we use the WEB client ID for all platforms
-// The iOS/Android client IDs are only needed for native Google Sign-In SDK
+// For expo-auth-session with PKCE, use Web client ID for all platforms
+// This is the recommended approach as it works consistently across platforms
 const GOOGLE_CLIENT_ID = Constants.expoConfig?.extra?.googleClientIdWeb || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB;
+// Client secret is only required when NOT using PKCE, but we'll include it for web
+const GOOGLE_CLIENT_SECRET = Platform.OS === 'web'
+  ? (Constants.expoConfig?.extra?.googleClientSecretWeb || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET_WEB)
+  : undefined;
 
 // Use platform-specific redirect URI
-const GOOGLE_REDIRECT_URI = AuthSession.makeRedirectUri({
-  scheme: Platform.OS === 'web' ? undefined : 'expo1',
-  useProxy: Platform.OS !== 'web',
-  path: Platform.OS === 'web' ? undefined : undefined,
-});
+// For native: use Expo's auth proxy (requires HTTPS for Google OAuth)
+// For web: use localhost
+const GOOGLE_REDIRECT_URI = Platform.OS === 'web'
+  ? 'http://localhost:8081'
+  : 'https://auth.expo.io/@anonymous/expo-1';
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -95,23 +105,32 @@ export const exchangeCodeForTokens = async (
   codeVerifier: string
 ): Promise<{ idToken: string; accessToken: string }> => {
   const config = getGoogleAuthConfig();
-  
+
+  const params: Record<string, string> = {
+    client_id: config.clientId,
+    code,
+    grant_type: 'authorization_code',
+    redirect_uri: config.redirectUri,
+    code_verifier: codeVerifier,
+  };
+
+  // Add client secret if available (required for web clients)
+  if (GOOGLE_CLIENT_SECRET) {
+    params.client_secret = GOOGLE_CLIENT_SECRET;
+  }
+
   const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      code,
-      grant_type: 'authorization_code',
-      redirect_uri: config.redirectUri,
-      code_verifier: codeVerifier,
-    }).toString(),
+    body: new URLSearchParams(params).toString(),
   });
 
   if (!tokenResponse.ok) {
-    throw new Error('Failed to exchange code for tokens');
+    const errorData = await tokenResponse.json();
+    console.error('Token exchange failed:', errorData);
+    throw new Error(`Failed to exchange code for tokens: ${errorData.error || 'Unknown error'}`);
   }
 
   const tokens = await tokenResponse.json();
@@ -156,36 +175,38 @@ export const authenticateWithGoogle = async (): Promise<GoogleAuthResult> => {
     console.log('Client ID:', GOOGLE_CLIENT_ID);
     console.log('Redirect URI:', GOOGLE_REDIRECT_URI);
 
-    // Generate PKCE code verifier and challenge
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
-
     const config = getGoogleAuthConfig();
 
-    // Create auth request
+    // Create auth request - let AuthSession handle PKCE automatically
     const request = new AuthSession.AuthRequest({
       clientId: config.clientId,
       scopes: ['openid', 'profile', 'email'],
       redirectUri: config.redirectUri,
       responseType: AuthSession.ResponseType.Code,
-      usePKCE: true,
-      codeChallenge: codeChallenge,
-      codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+      usePKCE: true, // This will auto-generate code_verifier and code_challenge
       extraParams: {
         access_type: 'offline',
       },
     });
 
     // Prompt for authentication
-    const result = await request.promptAsync({
+    const discovery = {
       authorizationEndpoint: GOOGLE_AUTH_URL,
-      useProxy: true,
-    });
+      tokenEndpoint: GOOGLE_TOKEN_URL,
+    };
+
+    const result = await request.promptAsync(discovery);
 
     console.log('Auth result type:', result.type);
     console.log('Auth result:', JSON.stringify(result, null, 2));
 
     if (result.type !== 'success') {
+      // User dismissed the authentication - don't log as error
+      if (result.type === 'dismiss' || result.type === 'cancel') {
+        console.log('User dismissed authentication');
+        throw new Error('USER_CANCELLED');
+      }
+
       console.error('Authentication failed with type:', result.type);
       throw new Error(`Google authentication ${result.type}`);
     }
@@ -193,6 +214,13 @@ export const authenticateWithGoogle = async (): Promise<GoogleAuthResult> => {
     // Exchange authorization code for tokens
     console.log('Exchanging code for tokens...');
     const { code } = result.params;
+
+    // Get the code_verifier from the request (generated by AuthSession)
+    const codeVerifier = request.codeVerifier;
+    if (!codeVerifier) {
+      throw new Error('Code verifier not found in auth request');
+    }
+
     const tokens = await exchangeCodeForTokens(code, codeVerifier);
 
     console.log('Tokens received, fetching user info...');
@@ -206,7 +234,12 @@ export const authenticateWithGoogle = async (): Promise<GoogleAuthResult> => {
       accessToken: tokens.accessToken,
       user: userInfo,
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Don't log user cancellation as an error
+    if (error?.message === 'USER_CANCELLED') {
+      throw error;
+    }
+
     console.error('Google authentication error:', error);
     console.error('Error details:', JSON.stringify(error, null, 2));
     throw error;

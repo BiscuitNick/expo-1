@@ -42,3 +42,7 @@ app-example
 /ios
 /android
 .env
+
+# Firebase config files (contain sensitive keys)
+GoogleService-Info.plist
+google-services.json

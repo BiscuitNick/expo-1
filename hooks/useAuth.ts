@@ -86,18 +86,24 @@ export const useAuth = (): UseAuthReturn => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Get Google auth result
       const googleResult: GoogleAuthResult = await authenticateWithGoogle();
-      
+
       // Sign in with Firebase using Google credentials
       const userData = await signInWithGoogle({
         idToken: googleResult.idToken,
         accessToken: googleResult.accessToken,
       });
-      
+
       setUser(userData);
     } catch (err: any) {
+      // Don't set error state if user cancelled
+      if (err?.message === 'USER_CANCELLED') {
+        console.log('User cancelled Google sign-in');
+        throw err;
+      }
+
       const errorMessage = getAuthErrorMessage(err);
       setError(errorMessage);
       throw err;

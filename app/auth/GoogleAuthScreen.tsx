@@ -29,11 +29,15 @@ export default function GoogleAuthScreen() {
       setLoading(true);
       await signInWithGoogle();
       console.log('Google sign-in successful');
-      
+
       // Navigate to main app
       router.replace('/(tabs)');
-    } catch (error) {
-      console.error('Google sign-in error:', error);
+    } catch (error: any) {
+      // Don't log or show alert if user cancelled the authentication
+      if (error?.message !== 'USER_CANCELLED') {
+        console.error('Google sign-in error:', error);
+        // Error will be shown by useEffect watching the error state
+      }
     } finally {
       setLoading(false);
     }
