@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listenToMessages, markMessageAsRead, MessageData, sendMessage } from '../services/firestoreService';
+import { listenToMessages, loadOlderMessages, markMessageAsRead, MessageData, sendMessage } from '../services/firestoreService';
 import { useAuth } from './useAuth';
 
 export interface UseMessagesReturn {
@@ -8,27 +8,44 @@ export interface UseMessagesReturn {
   error: string | null;
   sendMessage: (text: string) => Promise<void>;
   markAsRead: (messageId: string) => Promise<void>;
+  loadMore: () => Promise<void>;
+  hasMore: boolean;
+  loadingMore: boolean;
 }
+
+const INITIAL_MESSAGE_LIMIT = 50; // Load most recent 50 messages initially
+const PAGINATION_LIMIT = 20; // Load 20 more messages at a time
 
 export const useMessages = (conversationId: string | undefined): UseMessagesReturn => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [olderMessages, setOlderMessages] = useState<MessageData[]>([]);
 
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
+      setOlderMessages([]);
       setLoading(false);
+      setHasMore(true);
       return;
     }
 
     setLoading(true);
     setError(null);
+    setOlderMessages([]); // Reset older messages when conversation changes
 
-    // Subscribe to real-time message updates
+    // Subscribe to real-time message updates (limited to most recent messages)
     const unsubscribe = listenToMessages(conversationId, (updatedMessages) => {
       console.log('📨 Received', updatedMessages.length, 'messages from Firestore');
+
+      // Check if we got fewer messages than the limit (means no more to load)
+      if (updatedMessages.length < INITIAL_MESSAGE_LIMIT) {
+        setHasMore(false);
+      }
 
       // Merge with existing messages, removing optimistic ones that have real versions
       setMessages(prevMessages => {
@@ -42,7 +59,7 @@ export const useMessages = (conversationId: string | undefined): UseMessagesRetu
           )
         );
 
-        // Combine real messages with remaining optimistic messages
+        // Combine older messages, real messages, and optimistic messages
         return [...updatedMessages, ...optimisticMessages];
       });
 
@@ -54,7 +71,7 @@ export const useMessages = (conversationId: string | undefined): UseMessagesRetu
           markMessageAsRead(msg.id, user?.uid || '').catch(console.error);
         }
       });
-    });
+    }, INITIAL_MESSAGE_LIMIT);
 
     // Cleanup subscription on unmount
     return () => {
@@ -118,11 +135,61 @@ export const useMessages = (conversationId: string | undefined): UseMessagesRetu
     }
   };
 
+  const handleLoadMore = async (): Promise<void> => {
+    if (!conversationId || loadingMore || !hasMore) {
+      return;
+    }
+
+    // Combine real messages and older paginated messages to find the oldest
+    const allMessages = [...olderMessages, ...messages];
+    if (allMessages.length === 0) {
+      setHasMore(false);
+      return;
+    }
+
+    // Get the oldest message timestamp
+    const oldestMessage = allMessages[0]; // Messages are in chronological order (oldest first)
+
+    setLoadingMore(true);
+    setError(null);
+
+    try {
+      const older = await loadOlderMessages(
+        conversationId,
+        oldestMessage.timestamp,
+        PAGINATION_LIMIT
+      );
+
+      console.log('📚 Loaded', older.length, 'older messages');
+
+      if (older.length < PAGINATION_LIMIT) {
+        // No more messages to load
+        setHasMore(false);
+      }
+
+      if (older.length > 0) {
+        setOlderMessages(prev => [...older, ...prev]);
+      }
+
+      setLoadingMore(false);
+    } catch (err) {
+      console.error('Error loading more messages:', err);
+      setError('Failed to load older messages');
+      setLoadingMore(false);
+    }
+  };
+
+  // Combine older paginated messages with real-time messages
+  const allMessages = [...olderMessages, ...messages];
+
   return {
-    messages,
+    messages: allMessages,
     loading,
     error,
     sendMessage: handleSendMessage,
     markAsRead: handleMarkAsRead,
+    loadMore: handleLoadMore,
+    hasMore,
+    loadingMore,
   };
 };

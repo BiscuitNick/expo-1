@@ -1,4 +1,3 @@
-import { format, formatDistanceToNow } from 'date-fns';
 import React from 'react';
 import {
   Image,
@@ -7,6 +6,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { formatConversationTimestamp } from '../utils/dateUtils';
 
 export interface Conversation {
   id: string;
@@ -25,25 +25,6 @@ interface ConversationItemProps {
 }
 
 export default function ConversationItem({ conversation, onPress }: ConversationItemProps) {
-  const formatTimestamp = (timestamp: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - timestamp.getTime();
-    const dayInMs = 24 * 60 * 60 * 1000;
-
-    // If less than 24 hours, show relative time
-    if (diff < dayInMs) {
-      return formatDistanceToNow(timestamp, { addSuffix: false });
-    }
-
-    // If less than 7 days, show day of week
-    if (diff < 7 * dayInMs) {
-      return format(timestamp, 'EEEE');
-    }
-
-    // Otherwise show date
-    return format(timestamp, 'MMM d');
-  };
-
   return (
     <TouchableOpacity style={styles.container} onPress={onPress}>
       {/* Avatar */}
@@ -71,7 +52,7 @@ export default function ConversationItem({ conversation, onPress }: Conversation
             {conversation.name}
           </Text>
           <Text style={styles.timestamp}>
-            {formatTimestamp(conversation.timestamp)}
+            {formatConversationTimestamp(conversation.timestamp)}
           </Text>
         </View>
 

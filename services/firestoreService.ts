@@ -6,10 +6,12 @@ import {
   getDocs,
   getFirestore,
   limit,
+  limitToLast,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   Timestamp,
   updateDoc,
   where
@@ -186,16 +188,22 @@ export const sendMessage = async (
   }
 };
 
-// Listen to messages in a conversation
+// Listen to messages in a conversation (with optional limit for initial load)
 export const listenToMessages = (
   conversationId: string,
-  callback: (messages: MessageData[]) => void
+  callback: (messages: MessageData[]) => void,
+  messageLimit?: number
 ) => {
-  const q = query(
+  let q = query(
     collection(db, MESSAGES_COLLECTION),
     where('conversationId', '==', conversationId),
-    orderBy('timestamp', 'asc')
+    orderBy('timestamp', 'desc')
   );
+
+  // If limit is specified, get the most recent N messages
+  if (messageLimit) {
+    q = query(q, limit(messageLimit));
+  }
 
   return onSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map(doc => {
@@ -206,8 +214,42 @@ export const listenToMessages = (
         timestamp: data.timestamp?.toDate() || new Date(),
       } as MessageData;
     });
-    callback(messages);
+    // Reverse to get chronological order (oldest first)
+    callback(messages.reverse());
   });
+};
+
+// Load older messages (pagination)
+export const loadOlderMessages = async (
+  conversationId: string,
+  oldestMessageTimestamp: Date,
+  limitCount: number = 20
+): Promise<MessageData[]> => {
+  try {
+    const q = query(
+      collection(db, MESSAGES_COLLECTION),
+      where('conversationId', '==', conversationId),
+      orderBy('timestamp', 'desc'),
+      startAfter(Timestamp.fromDate(oldestMessageTimestamp)),
+      limit(limitCount)
+    );
+
+    const snapshot = await getDocs(q);
+    const messages = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp?.toDate() || new Date(),
+      } as MessageData;
+    });
+
+    // Reverse to get chronological order (oldest first)
+    return messages.reverse();
+  } catch (error) {
+    console.error('Error loading older messages:', error);
+    throw error;
+  }
 };
 
 // Mark message as read

@@ -1,10 +1,10 @@
-import { format } from 'date-fns';
 import React from 'react';
 import {
   StyleSheet,
   Text,
   View
 } from 'react-native';
+import { formatMessageTimestamp } from '../utils/dateUtils';
 
 export interface Message {
   id: string;
@@ -27,10 +27,6 @@ export default function MessageBubble({
   showSenderName = false,
   previousMessageSameSender = false,
 }: MessageBubbleProps) {
-  const formatTime = (timestamp: Date) => {
-    return format(timestamp, 'h:mm a');
-  };
-
   const getStatusIcon = () => {
     switch (message.status) {
       case 'sending':
@@ -83,7 +79,7 @@ export default function MessageBubble({
               message.isOwn ? styles.ownTimestamp : styles.otherTimestamp,
             ]}
           >
-            {formatTime(message.timestamp)}
+            {formatMessageTimestamp(message.timestamp)}
           </Text>
 
           {/* Status indicator (only for own messages) */}
