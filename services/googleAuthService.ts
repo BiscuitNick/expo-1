@@ -1,20 +1,22 @@
+import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 
 // Google OAuth configuration
-const GOOGLE_CLIENT_ID = Platform.select({
-  ios: 'your-ios-client-id.apps.googleusercontent.com',
-  android: 'your-android-client-id.apps.googleusercontent.com',
-  web: 'your-web-client-id.apps.googleusercontent.com',
-});
+// NOTE: For expo-auth-session OAuth flow, we use the WEB client ID for all platforms
+// The iOS/Android client IDs are only needed for native Google Sign-In SDK
+const GOOGLE_CLIENT_ID = Constants.expoConfig?.extra?.googleClientIdWeb || process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB;
 
+// Use platform-specific redirect URI
 const GOOGLE_REDIRECT_URI = AuthSession.makeRedirectUri({
-  useProxy: true,
+  scheme: Platform.OS === 'web' ? undefined : 'expo1',
+  useProxy: Platform.OS !== 'web',
+  path: Platform.OS === 'web' ? undefined : undefined,
 });
 
 // Google OAuth endpoints
-const GOOGLE_AUTH_URL = 'https://accounts.google.com/oauth/authorize';
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 export interface GoogleAuthResult {
@@ -146,25 +148,67 @@ export const getGoogleUserInfo = async (accessToken: string): Promise<{
 // Complete Google authentication flow
 export const authenticateWithGoogle = async (): Promise<GoogleAuthResult> => {
   try {
-    // For now, return a mock Google auth result for testing
-    // In production, you would implement the full OAuth flow
-    console.log('Google authentication - using mock for testing');
-    
-    // Mock Google auth result
-    const mockResult: GoogleAuthResult = {
-      idToken: 'mock_id_token_' + Date.now(),
-      accessToken: 'mock_access_token_' + Date.now(),
-      user: {
-        id: 'mock_user_' + Date.now(),
-        email: 'test@example.com',
-        name: 'Test User',
-        picture: 'https://via.placeholder.com/150',
-      },
-    };
+    if (!GOOGLE_CLIENT_ID) {
+      throw new Error('Google Client ID is not configured for this platform');
+    }
 
-    return mockResult;
+    console.log('Starting Google OAuth flow...');
+    console.log('Client ID:', GOOGLE_CLIENT_ID);
+    console.log('Redirect URI:', GOOGLE_REDIRECT_URI);
+
+    // Generate PKCE code verifier and challenge
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+    const config = getGoogleAuthConfig();
+
+    // Create auth request
+    const request = new AuthSession.AuthRequest({
+      clientId: config.clientId,
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri: config.redirectUri,
+      responseType: AuthSession.ResponseType.Code,
+      usePKCE: true,
+      codeChallenge: codeChallenge,
+      codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+      extraParams: {
+        access_type: 'offline',
+      },
+    });
+
+    // Prompt for authentication
+    const result = await request.promptAsync({
+      authorizationEndpoint: GOOGLE_AUTH_URL,
+      useProxy: true,
+    });
+
+    console.log('Auth result type:', result.type);
+    console.log('Auth result:', JSON.stringify(result, null, 2));
+
+    if (result.type !== 'success') {
+      console.error('Authentication failed with type:', result.type);
+      throw new Error(`Google authentication ${result.type}`);
+    }
+
+    // Exchange authorization code for tokens
+    console.log('Exchanging code for tokens...');
+    const { code } = result.params;
+    const tokens = await exchangeCodeForTokens(code, codeVerifier);
+
+    console.log('Tokens received, fetching user info...');
+    // Get user info
+    const userInfo = await getGoogleUserInfo(tokens.accessToken);
+
+    console.log('User info received:', userInfo.email);
+
+    return {
+      idToken: tokens.idToken,
+      accessToken: tokens.accessToken,
+      user: userInfo,
+    };
   } catch (error) {
     console.error('Google authentication error:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
     throw error;
   }
 };
