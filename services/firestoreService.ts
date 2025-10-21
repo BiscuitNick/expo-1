@@ -118,7 +118,8 @@ const findExistingConversation = async (
 // Get user's conversations
 export const getUserConversations = (
   userId: string,
-  callback: (conversations: ConversationData[]) => void
+  callback: (conversations: ConversationData[]) => void,
+  onError?: (error: Error) => void
 ) => {
   const q = query(
     collection(db, CONVERSATIONS_COLLECTION),
@@ -126,19 +127,28 @@ export const getUserConversations = (
     orderBy('lastMessageTimestamp', 'desc')
   );
 
-  return onSnapshot(q, (snapshot) => {
-    const conversations = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        ...data,
-        lastMessageTimestamp: data.lastMessageTimestamp?.toDate() || new Date(),
-        createdAt: data.createdAt?.toDate() || new Date(),
-        updatedAt: data.updatedAt?.toDate() || new Date(),
-      } as ConversationData;
-    });
-    callback(conversations);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const conversations = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          lastMessageTimestamp: data.lastMessageTimestamp?.toDate() || new Date(),
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as ConversationData;
+      });
+      callback(conversations);
+    },
+    (error) => {
+      console.error('Firestore error in getUserConversations:', error);
+      if (onError) {
+        onError(error as Error);
+      }
+    }
+  );
 };
 
 // Send a message

@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -9,61 +10,7 @@ import {
 import MessageBubble, { Message } from '../../components/MessageBubble';
 import MessageInput from '../../components/MessageInput';
 import { useAuth } from '../../hooks/useAuth';
-
-// Mock messages for testing
-const mockMessages: Message[] = [
-  {
-    id: '1',
-    text: 'Hey! How are you?',
-    senderId: 'other-user',
-    senderName: 'John Doe',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '2',
-    text: "I'm doing great! Thanks for asking. How about you?",
-    senderId: 'current-user',
-    timestamp: new Date(Date.now() - 1000 * 60 * 55), // 55 min ago
-    status: 'read',
-    isOwn: true,
-  },
-  {
-    id: '3',
-    text: "Pretty good! Working on a new project.",
-    senderId: 'other-user',
-    senderName: 'John Doe',
-    timestamp: new Date(Date.now() - 1000 * 60 * 50), // 50 min ago
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '4',
-    text: "That's awesome! What kind of project?",
-    senderId: 'current-user',
-    timestamp: new Date(Date.now() - 1000 * 60 * 45), // 45 min ago
-    status: 'read',
-    isOwn: true,
-  },
-  {
-    id: '5',
-    text: "It's a messaging app built with React Native and Firebase. Real-time chat with all the features!",
-    senderId: 'other-user',
-    senderName: 'John Doe',
-    timestamp: new Date(Date.now() - 1000 * 60 * 40), // 40 min ago
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '6',
-    text: "Sounds interesting! Would love to see it when you're done.",
-    senderId: 'current-user',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 min ago
-    status: 'delivered',
-    isOwn: true,
-  },
-];
+import { useMessages } from '../../hooks/useMessages';
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -71,44 +18,47 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const flatListRef = useRef<FlatList>(null);
 
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const {
+    messages: firestoreMessages,
+    loading,
+    error,
+    sendMessage: sendFirestoreMessage,
+  } = useMessages(id);
+
   const [isTyping, setIsTyping] = useState(false);
+
+  // Convert Firestore messages to UI format
+  const messages: Message[] = useMemo(() => {
+    return firestoreMessages.map(msg => ({
+      id: msg.id,
+      text: msg.text,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      timestamp: msg.timestamp,
+      status: msg.status,
+      isOwn: msg.senderId === user?.uid,
+    }));
+  }, [firestoreMessages, user?.uid]);
 
   // Scroll to bottom on mount and when new messages arrive
   useEffect(() => {
-    setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
-    }, 100);
+    if (messages.length > 0) {
+      // Use a slight delay to ensure the FlatList has rendered
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
   }, [messages]);
 
-  const handleSend = (text: string) => {
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text,
-      senderId: user?.uid || 'current-user',
-      timestamp: new Date(),
-      status: 'sending',
-      isOwn: true,
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-
-    // Simulate message status updates
-    setTimeout(() => {
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === newMessage.id ? { ...msg, status: 'sent' as const } : msg
-        )
-      );
-    }, 500);
-
-    setTimeout(() => {
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === newMessage.id ? { ...msg, status: 'delivered' as const } : msg
-        )
-      );
-    }, 1000);
+  const handleSend = async (text: string) => {
+    try {
+      await sendFirestoreMessage(text);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      // TODO: Show error to user
+    }
   };
 
   const handleTypingStart = () => {
@@ -144,6 +94,24 @@ export default function ChatScreen() {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading messages...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>Failed to load messages</Text>
+        <Text style={styles.errorSubtext}>{error}</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Messages List */}
@@ -153,7 +121,18 @@ export default function ChatScreen() {
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        onContentSizeChange={() => {
+          // Scroll to bottom when content size changes (new messages)
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }}
+        onLayout={() => {
+          // Scroll to bottom on initial layout
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }, 100);
+        }}
       />
 
       {/* Typing Indicator */}
@@ -174,6 +153,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   messagesList: {
     paddingVertical: 12,
   },
@@ -186,5 +169,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FF3B30',
+    marginBottom: 8,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingHorizontal: 40,
   },
 });

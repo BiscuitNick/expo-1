@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   StyleSheet,
@@ -11,60 +13,49 @@ import {
 } from 'react-native';
 import ConversationItem, { Conversation } from '../../components/ConversationItem';
 import { useAuth } from '../../hooks/useAuth';
-
-// Mock data for testing - will be replaced with real Firestore data later
-const mockConversations: Conversation[] = [
-  {
-    id: '1',
-    name: 'John Doe',
-    lastMessage: 'Hey, how are you doing?',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-    unreadCount: 2,
-    isOnline: true,
-    isGroup: false,
-  },
-  {
-    id: '2',
-    name: 'Jane Smith',
-    lastMessage: 'Thanks for your help!',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    unreadCount: 0,
-    isOnline: false,
-    isGroup: false,
-  },
-  {
-    id: '3',
-    name: 'Team Project',
-    lastMessage: 'Alice: The meeting is at 3 PM',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    unreadCount: 5,
-    isOnline: false,
-    isGroup: true,
-  },
-  {
-    id: '4',
-    name: 'Bob Johnson',
-    lastMessage: 'See you tomorrow!',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    unreadCount: 0,
-    isOnline: true,
-    isGroup: false,
-  },
-];
+import { useConversations } from '../../hooks/useConversations';
+import { createConversation, sendMessage } from '../../services/firestoreService';
 
 export default function ChatListScreen() {
   const { user } = useAuth();
-  const [conversations, setConversations] = useState<Conversation[]>(mockConversations);
+  const { conversations: firestoreConversations, loading, error: conversationsError } = useConversations();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [creatingConvo, setCreatingConvo] = useState(false);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    // TODO: Implement actual data refresh from Firestore
+    // Firestore already handles real-time updates
     setTimeout(() => {
       setRefreshing(false);
-    }, 1000);
+    }, 500);
   };
+
+  // Convert Firestore conversations to UI format
+  const conversations: Conversation[] = useMemo(() => {
+    return firestoreConversations.map(conv => {
+      // Get the other participant's info (for 1-on-1 chats)
+      const otherParticipantId = conv.participants.find(id => id !== user?.uid);
+      const otherParticipant = otherParticipantId
+        ? conv.participantDetails[otherParticipantId]
+        : null;
+
+      return {
+        id: conv.id,
+        name: conv.isGroup
+          ? (conv.groupName || 'Group Chat')
+          : (otherParticipant?.displayName || 'Unknown User'),
+        avatar: conv.isGroup
+          ? conv.groupAvatar
+          : otherParticipant?.photoURL,
+        lastMessage: conv.lastMessage || 'No messages yet',
+        timestamp: conv.lastMessageTimestamp,
+        unreadCount: 0, // TODO: Implement unread count
+        isOnline: false, // TODO: Implement online status
+        isGroup: conv.isGroup,
+      };
+    });
+  }, [firestoreConversations, user?.uid]);
 
   const handleConversationPress = (conversation: Conversation) => {
     router.push(`/chat/${conversation.id}`);
@@ -73,6 +64,59 @@ export default function ChatListScreen() {
   const handleNewChat = () => {
     // TODO: Navigate to new chat screen
     console.log('New chat');
+  };
+
+  const createTestConversation = async () => {
+    if (!user?.uid) {
+      Alert.alert('Error', 'You must be signed in to create a conversation');
+      return;
+    }
+
+    setCreatingConvo(true);
+    try {
+      // Create a mock other user (only include photoURL if it exists)
+      const mockOtherUser: any = {
+        displayName: 'Test User',
+        email: 'test@example.com',
+      };
+
+      const currentUserData: any = {
+        displayName: user.displayName || 'You',
+        email: user.email || '',
+      };
+
+      // Only add photoURL if it exists (Firestore doesn't allow undefined)
+      if (user.photoURL) {
+        currentUserData.photoURL = user.photoURL;
+      }
+
+      // Create conversation
+      const conversationId = await createConversation(
+        user.uid,
+        currentUserData,
+        'test-user-123',
+        mockOtherUser
+      );
+
+      // Send a welcome message
+      await sendMessage(
+        conversationId,
+        'test-user-123',
+        'Test User',
+        'Hey! This is a test conversation. Try sending a message!'
+      );
+
+      Alert.alert(
+        'Success!',
+        'Test conversation created! You can now send messages.',
+        [{ text: 'OK', onPress: () => router.push(`/chat/${conversationId}`) }]
+      );
+    } catch (error) {
+      console.error('Error creating test conversation:', error);
+      Alert.alert('Error', 'Failed to create test conversation. Check console for details.');
+    } finally {
+      setCreatingConvo(false);
+    }
   };
 
   const filteredConversations = conversations.filter(conv =>
@@ -86,17 +130,60 @@ export default function ChatListScreen() {
     />
   );
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyTitle}>No Conversations Yet</Text>
-      <Text style={styles.emptyText}>
-        Start a new conversation to get chatting!
-      </Text>
-      <TouchableOpacity style={styles.newChatButton} onPress={handleNewChat}>
-        <Text style={styles.newChatButtonText}>Start New Chat</Text>
-      </TouchableOpacity>
-    </View>
-  );
+  const renderEmptyState = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.emptyText}>Loading conversations...</Text>
+        </View>
+      );
+    }
+
+    if (conversationsError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.errorTitle}>⏳ Indexes Building</Text>
+          <Text style={styles.errorText}>{conversationsError}</Text>
+          <Text style={styles.debugText}>
+            Check Firebase Console → Firestore → Indexes tab for progress
+          </Text>
+          <TouchableOpacity
+            style={styles.newChatButton}
+            onPress={handleRefresh}
+          >
+            <Text style={styles.newChatButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>No Conversations Yet</Text>
+        <Text style={styles.emptyText}>
+          Start a new conversation to get chatting!
+        </Text>
+
+        {/* Debug: Create Test Conversation */}
+        <TouchableOpacity
+          style={[styles.newChatButton, styles.debugButton]}
+          onPress={createTestConversation}
+          disabled={creatingConvo}
+        >
+          {creatingConvo ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.newChatButtonText}>🧪 Create Test Conversation</Text>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.debugText}>
+          This will create a test chat so you can try out messaging!
+        </Text>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -171,6 +258,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FF9500',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
   newChatButton: {
     backgroundColor: '#007AFF',
     paddingHorizontal: 24,
@@ -181,6 +281,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  debugButton: {
+    backgroundColor: '#FF9500',
+    marginTop: 16,
+  },
+  debugText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   fab: {
     position: 'absolute',
