@@ -9,14 +9,12 @@ import {
     resetPassword,
     signIn,
     SignInData,
-    signInWithGoogle,
     signOutUser,
     signUp,
     SignUpData,
     UpdateProfileData,
     updateUserProfile
 } from '../services/authService';
-import { authenticateWithGoogle, GoogleAuthResult } from '../services/googleAuthService';
 
 export interface UseAuthReturn {
   // State
@@ -24,16 +22,15 @@ export interface UseAuthReturn {
   loading: boolean;
   error: string | null;
   isAuthenticated: boolean;
-  
+
   // Actions
-  signUp: (data: SignUpData) => Promise<void>;
+  signUp: (data: SignUpData) => Promise<AuthUser>;
   signIn: (data: SignInData) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   clearError: () => void;
-  
+
   // Utilities
   getCurrentUserId: () => string | null;
   isEmailVerified: () => boolean;
@@ -56,6 +53,7 @@ export const useAuth = (): UseAuthReturn => {
       setError(null);
       const userData = await signUp(data);
       setUser(userData);
+      return userData; // Return user data for further processing
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err);
       setError(errorMessage);
@@ -71,31 +69,6 @@ export const useAuth = (): UseAuthReturn => {
       setLoading(true);
       setError(null);
       const userData = await signIn(data);
-      setUser(userData);
-    } catch (err: any) {
-      const errorMessage = getAuthErrorMessage(err);
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Google sign in function
-  const handleGoogleSignIn = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Get Google auth result
-      const googleResult: GoogleAuthResult = await authenticateWithGoogle();
-      
-      // Sign in with Firebase using Google credentials
-      const userData = await signInWithGoogle({
-        idToken: googleResult.idToken,
-        accessToken: googleResult.accessToken,
-      });
-      
       setUser(userData);
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err);
@@ -173,6 +146,15 @@ export const useAuth = (): UseAuthReturn => {
   // Set up auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
+      if (user) {
+        console.log('🔐 Auth state changed: User authenticated', {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+      } else {
+        console.log('🔐 Auth state changed: No user (logged out)');
+      }
       setUser(user);
       setLoading(false);
     });
@@ -181,29 +163,21 @@ export const useAuth = (): UseAuthReturn => {
     return () => unsubscribe();
   }, []);
 
-  // Initialize user state
-  useEffect(() => {
-    const currentUser = getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
-  }, []);
-
   return {
     // State
     user,
     loading,
     error,
     isAuthenticated: !!user,
-    
+
     // Actions
     signUp: handleSignUp,
     signIn: handleSignIn,
-    signInWithGoogle: handleGoogleSignIn,
     signOut: handleSignOut,
     updateProfile: handleUpdateProfile,
     resetPassword: handleResetPassword,
     clearError,
-    
+
     // Utilities
     getCurrentUserId: getCurrentUserIdCallback,
     isEmailVerified: isEmailVerifiedCallback,

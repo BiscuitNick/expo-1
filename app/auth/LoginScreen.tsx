@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../../hooks/useAuth';
+import { createUserProfile, getUserProfile } from '../../services/userService';
 import { validateLoginForm } from '../../utils/validation';
 
 export default function LoginScreen() {
@@ -33,6 +34,8 @@ export default function LoginScreen() {
     try {
       await signIn({ email, password });
       console.log('Login successful');
+      // Redirect to main app after successful login
+      router.replace('/(tabs)');
     } catch (error) {
       // Error is handled by useAuth hook
       console.error('Login error:', error);
@@ -115,7 +118,7 @@ export default function LoginScreen() {
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <Link href="/screens/auth/SignupScreen" asChild>
+            <Link href="/auth/SignupScreen" asChild>
               <TouchableOpacity disabled={loading}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>

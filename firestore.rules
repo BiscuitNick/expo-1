@@ -1,0 +1,110 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isParticipant(participants) {
+      return isAuthenticated() && request.auth.uid in participants;
+    }
+
+    // Users collection rules
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (for search, display names, etc.)
+      allow read: if isAuthenticated();
+
+      // Only the user can create their own profile
+      allow create: if isOwner(userId) &&
+                      request.resource.data.keys().hasAll(['email', 'displayName', 'isOnline', 'lastSeen', 'createdAt', 'updatedAt']) &&
+                      request.resource.data.email is string &&
+                      request.resource.data.displayName is string &&
+                      request.resource.data.isOnline is bool;
+
+      // Only the user can update their own profile
+      allow update: if isOwner(userId) &&
+                      // Cannot change email or createdAt
+                      (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['email', 'createdAt']));
+
+      // Only the user can delete their own profile
+      allow delete: if isOwner(userId);
+    }
+
+    // Conversations collection rules
+    match /conversations/{conversationId} {
+      // TEMPORARY: Relaxed for testing - allow authenticated users to read any conversation
+      allow read: if isAuthenticated();
+
+      // TEMPORARY: Relaxed for testing - simplified conversation creation
+      // TODO: Restore production rules before launch
+      allow create: if isAuthenticated() &&
+                      request.resource.data.keys().hasAll(['participants', 'participantDetails', 'isGroup', 'createdAt', 'updatedAt']) &&
+                      request.resource.data.participants is list &&
+                      request.resource.data.participants.size() >= 2 &&
+                      request.resource.data.isGroup is bool;
+
+      // TEMPORARY: Relaxed for testing
+      allow update: if isAuthenticated();
+
+      // TEMPORARY: Relaxed for testing
+      allow delete: if isAuthenticated();
+    }
+
+    // Messages collection rules
+    match /messages/{messageId} {
+      // TEMPORARY: Relaxed for testing - allow authenticated users to read any message
+      allow read: if isAuthenticated();
+
+      // TEMPORARY: Relaxed for testing - allow authenticated users to create any message
+      // TODO: Restore production rules before launch
+      allow create: if isAuthenticated() &&
+                      request.resource.data.keys().hasAll(['conversationId', 'senderId', 'senderName', 'text', 'timestamp', 'status', 'readBy']) &&
+                      request.resource.data.conversationId is string &&
+                      request.resource.data.text is string &&
+                      request.resource.data.status in ['sending', 'sent', 'delivered', 'read'] &&
+                      request.resource.data.readBy is list;
+
+      // TEMPORARY: Relaxed for testing
+      allow update: if isAuthenticated();
+
+      // TEMPORARY: Relaxed for testing
+      allow delete: if isAuthenticated();
+    }
+
+    // Presence collection rules (for real-time online/offline status)
+    // This is separate from users collection for better performance
+    match /presence/{userId} {
+      // Anyone authenticated can read presence
+      allow read: if isAuthenticated();
+
+      // Only the user can write their own presence
+      allow write: if isOwner(userId);
+    }
+
+    // Typing indicators collection (for showing "user is typing...")
+    match /typing/{conversationId}/users/{userId} {
+      // Only participants can read typing indicators
+      allow read: if isAuthenticated() &&
+                    exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+                    isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+
+      // Only the user can write their own typing indicator
+      // Must be a participant of the conversation
+      allow write: if isOwner(userId) &&
+                     exists(/databases/$(database)/documents/conversations/$(conversationId)) &&
+                     isParticipant(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
+    }
+
+    // Deny all other access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

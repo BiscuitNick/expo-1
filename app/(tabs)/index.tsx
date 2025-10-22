@@ -1,134 +1,404 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
+import { router } from 'expo-router';
+import React, { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import ConversationItem, { Conversation } from '../../components/ConversationItem';
+import { useAuth } from '../../hooks/useAuth';
+import { useConversations } from '../../hooks/useConversations';
+import { useMultiplePresences } from '../../hooks/usePresence';
+import { createConversation, sendMessage } from '../../services/firestoreService';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link, router } from 'expo-router';
+export default function ChatListScreen() {
+  const { user } = useAuth();
+  const { conversations: firestoreConversations, loading, error: conversationsError } = useConversations();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [creatingConvo, setCreatingConvo] = useState(false);
 
-export default function HomeScreen() {
+  const handleRefresh = () => {
+    setRefreshing(true);
+    // Firestore already handles real-time updates
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 500);
+  };
+
+  // Get all participant IDs for presence tracking
+  const participantIds = useMemo(() => {
+    const ids: string[] = [];
+    firestoreConversations.forEach(conv => {
+      if (!conv.isGroup) {
+        // For 1-on-1 chats, get the other participant
+        const otherId = conv.participants.find(id => id !== user?.uid);
+        if (otherId) ids.push(otherId);
+      }
+    });
+    return ids;
+  }, [firestoreConversations, user?.uid]);
+
+  // Subscribe to presence for all participants
+  const presences = useMultiplePresences(participantIds);
+
+  // Convert Firestore conversations to UI format
+  const conversations: Conversation[] = useMemo(() => {
+    if (!user) return []; // Return empty array if no user
+    return firestoreConversations.map(conv => {
+      // Get the other participant's info (for 1-on-1 chats)
+      const otherParticipantId = conv.participants.find(id => id !== user?.uid);
+      const otherParticipant = otherParticipantId
+        ? conv.participantDetails[otherParticipantId]
+        : null;
+
+      // Get online status for 1-on-1 chats
+      const isOnline = !conv.isGroup && otherParticipantId
+        ? presences[otherParticipantId]?.isOnline || false
+        : false;
+
+      return {
+        id: conv.id,
+        name: conv.isGroup
+          ? (conv.groupName || 'Group Chat')
+          : (otherParticipant?.displayName || 'Unknown User'),
+        avatar: conv.isGroup
+          ? conv.groupAvatar
+          : otherParticipant?.photoURL,
+        lastMessage: conv.lastMessage || 'No messages yet',
+        timestamp: conv.lastMessageTimestamp,
+        unreadCount: 0, // TODO: Implement unread count
+        isOnline: isOnline,
+        isGroup: conv.isGroup,
+      };
+    });
+  }, [firestoreConversations, user?.uid, presences]);
+
+  const handleConversationPress = (conversation: Conversation) => {
+    router.push(`/chat/${conversation.id}`);
+  };
+
+  const handleNewChat = () => {
+    Alert.alert(
+      'New Chat',
+      'What would you like to create?',
+      [
+        {
+          text: 'Group Chat',
+          onPress: () => router.push('/group/create'),
+        },
+        {
+          text: 'Test Conversation',
+          onPress: createTestConversation,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
+  const createTestConversation = async () => {
+    if (!user?.uid) {
+      Alert.alert('Error', 'You must be signed in to create a conversation');
+      return;
+    }
+
+    setCreatingConvo(true);
+    try {
+      // Create a mock other user (only include photoURL if it exists)
+      const mockOtherUser: any = {
+        displayName: 'Test User',
+        email: 'test@example.com',
+      };
+
+      const currentUserData: any = {
+        displayName: user.displayName || 'You',
+        email: user.email || '',
+      };
+
+      // Only add photoURL if it exists (Firestore doesn't allow undefined)
+      if (user.photoURL) {
+        currentUserData.photoURL = user.photoURL;
+      }
+
+      // Create conversation
+      const conversationId = await createConversation(
+        user.uid,
+        currentUserData,
+        'test-user-123',
+        mockOtherUser
+      );
+
+      // Send a welcome message
+      await sendMessage(
+        conversationId,
+        'test-user-123',
+        'Test User',
+        'Hey! This is a test conversation. Try sending a message!'
+      );
+
+      Alert.alert(
+        'Success!',
+        'Test conversation created! You can now send messages.',
+        [{ text: 'OK', onPress: () => router.push(`/chat/${conversationId}`) }]
+      );
+    } catch (error) {
+      console.error('Error creating test conversation:', error);
+      Alert.alert('Error', 'Failed to create test conversation. Check console for details.');
+    } finally {
+      setCreatingConvo(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(conv =>
+    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderConversationItem = ({ item }: { item: Conversation }) => (
+    <ConversationItem
+      conversation={item}
+      onPress={() => handleConversationPress(item)}
+    />
+  );
+
+  const renderEmptyState = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.emptyText}>Loading conversations...</Text>
+        </View>
+      );
+    }
+
+    if (conversationsError) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.errorTitle}>⏳ Indexes Building</Text>
+          <Text style={styles.errorText}>{conversationsError}</Text>
+          <Text style={styles.debugText}>
+            Check Firebase Console → Firestore → Indexes tab for progress
+          </Text>
+          <TouchableOpacity
+            style={styles.newChatButton}
+            onPress={handleRefresh}
+          >
+            <Text style={styles.newChatButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.emptyTitle}>No Conversations Yet</Text>
+        <Text style={styles.emptyText}>
+          Start a new conversation to get chatting!
+        </Text>
+
+        {/* Debug: Create Test Conversation */}
+        <TouchableOpacity
+          style={[styles.newChatButton, styles.debugButton]}
+          onPress={createTestConversation}
+          disabled={creatingConvo}
+        >
+          {creatingConvo ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.newChatButtonText}>🧪 Create Test Conversation</Text>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.debugText}>
+          This will create a test chat so you can try out messaging!
+        </Text>
+      </View>
+    );
+  };
+
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <View style={styles.authPromptContainer}>
+        <Text style={styles.authPromptTitle}>Sign in to view chats</Text>
+        <Text style={styles.authPromptSubtitle}>
+          You need to be logged in to access your messages
+        </Text>
+        <TouchableOpacity
+          style={styles.authPromptButton}
+          onPress={() => router.push('/auth/GoogleAuthScreen')}
+        >
+          <Text style={styles.authPromptButtonText}>Go to Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <View style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search conversations..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          clearButtonMode="while-editing"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Test Authentication</ThemedText>
-        <ThemedText>
-          Test the authentication screens we just created:
-        </ThemedText>
-        <ThemedView style={styles.authButtons}>
-          <TouchableOpacity 
-            style={styles.authButton}
-            onPress={() => router.push('/auth/GoogleAuthScreen')}
-          >
-            <ThemedText style={styles.authButtonText}>Test Google Auth (Primary)</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.authButton}
-            onPress={() => router.push('/auth/LoginScreen')}
-          >
-            <ThemedText style={styles.authButtonText}>Test Email Login</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.authButton}
-            onPress={() => router.push('/auth/SignupScreen')}
-          >
-            <ThemedText style={styles.authButtonText}>Test Email Signup</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.authButton}
-            onPress={() => router.push('/auth/ProfileSetupScreen')}
-          >
-            <ThemedText style={styles.authButtonText}>Test Profile Setup</ThemedText>
-          </TouchableOpacity>
-        </ThemedView>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* Conversation List */}
+      <FlatList
+        data={filteredConversations}
+        renderItem={renderConversationItem}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={
+          filteredConversations.length === 0 ? styles.emptyList : undefined
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        ListEmptyComponent={renderEmptyState}
+      />
+
+      {/* New Chat FAB */}
+      <TouchableOpacity style={styles.fab} onPress={handleNewChat}>
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
   },
-  stepContainer: {
-    gap: 8,
+  searchContainer: {
+    backgroundColor: '#fff',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  searchInput: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  emptyList: {
+    flex: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
   },
-  authButtons: {
-    gap: 12,
-    marginTop: 12,
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FF9500',
+    marginBottom: 12,
   },
-  authButton: {
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  newChatButton: {
     backgroundColor: '#007AFF',
-    padding: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
-    alignItems: 'center',
   },
-  authButtonText: {
+  newChatButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  debugButton: {
+    backgroundColor: '#FF9500',
+    marginTop: 16,
+  },
+  debugText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  fabText: {
+    fontSize: 32,
+    color: '#fff',
+    fontWeight: '300',
+  },
+  authPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  authPromptTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  authPromptSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  authPromptButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  authPromptButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: '600',
   },
 });

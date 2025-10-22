@@ -61,17 +61,21 @@ export const createUserProfile = async (userData: CreateUserProfileData): Promis
   try {
     const userRef = doc(db, 'users', userData.uid);
     const now = serverTimestamp();
-    
-    const profileData: Omit<UserProfile, 'uid'> = {
+
+    const profileData: any = {
       email: userData.email,
       displayName: userData.displayName,
-      photoURL: userData.photoURL,
       bio: userData.bio || '',
-      isOnline: true,
+      isOnline: false, // Start as offline - PresenceManager will set to online when app is active
       lastSeen: now,
       createdAt: now,
       updatedAt: now,
     };
+
+    // Only add photoURL if it exists (Firestore doesn't allow undefined)
+    if (userData.photoURL) {
+      profileData.photoURL = userData.photoURL;
+    }
 
     await setDoc(userRef, profileData);
 

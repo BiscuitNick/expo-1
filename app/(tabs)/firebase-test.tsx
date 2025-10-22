@@ -1,18 +1,36 @@
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { app } from '../../firebaseConfig';
+import { useAuth } from '../../hooks/useAuth';
+import { generateMockData } from '../../utils/mockDataGenerator';
 
 export default function FirebaseTestScreen() {
+  const { user } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<string>('Testing...');
   const [authStatus, setAuthStatus] = useState<string>('Not authenticated');
   const [firestoreStatus, setFirestoreStatus] = useState<string>('Not tested');
+  const [emulatorStatus, setEmulatorStatus] = useState<string>('Checking...');
   const [testResults, setTestResults] = useState<string[]>([]);
+  const [isGeneratingMockData, setIsGeneratingMockData] = useState(false);
 
   useEffect(() => {
+    checkEmulatorStatus();
     testFirebaseConnection();
   }, []);
+
+  const checkEmulatorStatus = () => {
+    const useEmulator = process.env.EXPO_PUBLIC_USE_EMULATOR === 'true';
+    if (useEmulator) {
+      setEmulatorStatus(`✅ Using Emulator (localhost:9099)`);
+      addTestResult('🔥 Firebase Auth Emulator is ENABLED');
+      addTestResult(`Platform: ${Platform.OS}`);
+    } else {
+      setEmulatorStatus('⚠️ Using Production Firebase');
+      addTestResult('☁️ Using PRODUCTION Firebase (not emulator)');
+    }
+  };
 
   const addTestResult = (result: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${result}`]);
@@ -76,17 +94,17 @@ export default function FirebaseTestScreen() {
       // Listen for auth state changes
       onAuthStateChanged(auth, (user) => {
         if (user) {
-          setAuthStatus(`✅ Authenticated as: ${user.uid}`);
-          addTestResult(`Authentication: SUCCESS (UID: ${user.uid})`);
+          setAuthStatus(`✅ Authenticated as: ${user.email || user.uid}`);
+          addTestResult(`Authentication: SUCCESS (UID: ${user.uid}, Email: ${user.email || 'none'})`);
         } else {
           setAuthStatus('❌ Not authenticated');
           addTestResult('Authentication: NOT AUTHENTICATED');
         }
       });
 
-      // Try anonymous authentication
-      await signInAnonymously(auth);
-      
+      // Check current authentication status (removed anonymous auth)
+      addTestResult('Checking if user is already authenticated...');
+
     } catch (error) {
       setAuthStatus('❌ Authentication failed');
       addTestResult(`Authentication test failed: ${error}`);
@@ -115,6 +133,29 @@ export default function FirebaseTestScreen() {
     testFirebaseConnection();
   };
 
+  const handleGenerateMockData = async () => {
+    if (!user?.uid) {
+      addTestResult('❌ Cannot generate mock data: No user authenticated');
+      return;
+    }
+
+    setIsGeneratingMockData(true);
+    addTestResult('Starting mock data generation...');
+
+    try {
+      const result = await generateMockData(user.uid);
+      addTestResult(`✅ Mock data generated successfully!`);
+      addTestResult(`- Created ${result.conversationsCreated} conversations`);
+      addTestResult(`- Created ${result.messagesCreated} messages`);
+      addTestResult(`🎉 You can now view the conversations in the Chats tab!`);
+    } catch (error) {
+      addTestResult(`❌ Failed to generate mock data: ${error}`);
+      console.error('Mock data generation error:', error);
+    } finally {
+      setIsGeneratingMockData(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -123,6 +164,11 @@ export default function FirebaseTestScreen() {
       </View>
 
       <View style={styles.statusContainer}>
+        <View style={styles.statusItem}>
+          <Text style={styles.statusLabel}>Environment:</Text>
+          <Text style={styles.statusValue}>{emulatorStatus}</Text>
+        </View>
+
         <View style={styles.statusItem}>
           <Text style={styles.statusLabel}>Firebase App:</Text>
           <Text style={styles.statusValue}>{connectionStatus}</Text>
@@ -142,6 +188,23 @@ export default function FirebaseTestScreen() {
       <View style={styles.buttonContainer}>
         <TouchableOpacity style={styles.button} onPress={runFullTest}>
           <Text style={styles.buttonText}>Run Full Test</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.mockDataButton]}
+          onPress={handleGenerateMockData}
+          disabled={isGeneratingMockData || !user}
+        >
+          {isGeneratingMockData ? (
+            <View style={styles.buttonContent}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={[styles.buttonText, styles.buttonTextWithIcon]}>Generating...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>
+              {user ? 'Generate Mock Data' : 'Login First to Generate'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={signOutUser}>
@@ -232,16 +295,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  mockDataButton: {
+    backgroundColor: '#34C759',
+  },
   secondaryButton: {
     backgroundColor: '#FF9500',
   },
   clearButton: {
     backgroundColor: '#FF3B30',
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  buttonTextWithIcon: {
+    marginLeft: 8,
   },
   resultsContainer: {
     backgroundColor: '#fff',

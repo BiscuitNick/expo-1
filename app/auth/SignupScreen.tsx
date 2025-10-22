@@ -12,7 +12,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
+import { createUserProfile } from '../../services/userService';
 import { validateSignupForm } from '../../utils/validation';
 
 export default function SignupScreen() {
@@ -28,6 +30,11 @@ export default function SignupScreen() {
   }>({});
   const { signUp, loading, error, clearError } = useAuth();
 
+  // Refs for input navigation
+  const emailRef = React.useRef<TextInput>(null);
+  const passwordRef = React.useRef<TextInput>(null);
+  const confirmPasswordRef = React.useRef<TextInput>(null);
+
   const validateForm = () => {
     const newErrors = validateSignupForm(email, password, confirmPassword, displayName);
     setErrors(newErrors);
@@ -38,11 +45,24 @@ export default function SignupScreen() {
     if (!validateForm()) return;
 
     try {
-      await signUp({ email, password, displayName });
+      const userData = await signUp({ email, password, displayName });
       console.log('Signup successful');
-      
-      // Navigate to profile setup screen
-      router.push('/auth/ProfileSetupScreen');
+
+      // Create user profile in Firestore
+      try {
+        await createUserProfile({
+          uid: userData.uid,
+          email: userData.email || email,
+          displayName: userData.displayName || displayName,
+        });
+        console.log('User profile created in Firestore');
+      } catch (profileError) {
+        console.error('Error creating user profile:', profileError);
+        // Don't block signup if profile creation fails
+      }
+
+      // Navigate to main app
+      router.replace('/(tabs)');
     } catch (error) {
       // Error is handled by useAuth hook
       console.error('Signup error:', error);
@@ -64,11 +84,17 @@ export default function SignupScreen() {
   }, [error, clearError]);
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <View style={styles.header}>
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>Join MessageAI today</Text>
@@ -88,6 +114,9 @@ export default function SignupScreen() {
               autoCapitalize="words"
               autoCorrect={false}
               editable={!loading}
+              returnKeyType="next"
+              onSubmitEditing={() => emailRef.current?.focus()}
+              blurOnSubmit={false}
             />
             {errors.displayName && <Text style={styles.errorText}>{errors.displayName}</Text>}
           </View>
@@ -95,6 +124,7 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email</Text>
             <TextInput
+              ref={emailRef}
               style={[styles.input, errors.email && styles.inputError]}
               placeholder="Enter your email"
               value={email}
@@ -106,6 +136,9 @@ export default function SignupScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
             />
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
@@ -113,6 +146,7 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Password</Text>
             <TextInput
+              ref={passwordRef}
               style={[styles.input, errors.password && styles.inputError]}
               placeholder="Create a password"
               value={password}
@@ -124,6 +158,9 @@ export default function SignupScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              returnKeyType="next"
+              onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+              blurOnSubmit={false}
             />
             {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
           </View>
@@ -131,6 +168,7 @@ export default function SignupScreen() {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Confirm Password</Text>
             <TextInput
+              ref={confirmPasswordRef}
               style={[styles.input, errors.confirmPassword && styles.inputError]}
               placeholder="Confirm your password"
               value={confirmPassword}
@@ -142,6 +180,8 @@ export default function SignupScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleSignup}
             />
             {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
           </View>
@@ -160,7 +200,7 @@ export default function SignupScreen() {
 
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>Already have an account? </Text>
-            <Link href="/screens/auth/LoginScreen" asChild>
+            <Link href="/auth/LoginScreen" asChild>
               <TouchableOpacity disabled={loading}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </TouchableOpacity>
@@ -168,19 +208,24 @@ export default function SignupScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  container: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+    paddingBottom: 100, // Extra padding for keyboard
   },
   header: {
     alignItems: 'center',

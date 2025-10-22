@@ -1,0 +1,55 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isImageFile() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isFileSizeValid() {
+      // Max 5MB for images
+      return request.resource.size < 5 * 1024 * 1024;
+    }
+
+    // Profile pictures
+    match /profile-pictures/{userId} {
+      // Anyone authenticated can view profile pictures
+      allow read: if isAuthenticated();
+
+      // Only the user can upload/update their own profile picture
+      allow write: if isOwner(userId) &&
+                     isImageFile() &&
+                     isFileSizeValid();
+
+      // Only the user can delete their own profile picture
+      allow delete: if isOwner(userId);
+    }
+
+    // Group avatars
+    match /group-avatars/{groupId} {
+      // Anyone authenticated can view group avatars
+      allow read: if isAuthenticated();
+
+      // Any authenticated user can create a group avatar
+      // (authorization is handled at the Firestore level)
+      allow write: if isAuthenticated() &&
+                     isImageFile() &&
+                     isFileSizeValid();
+    }
+
+    // Deny all other access by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
