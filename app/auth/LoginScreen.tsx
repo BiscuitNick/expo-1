@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../../hooks/useAuth';
+import { createUserProfile, getUserProfile } from '../../services/userService';
 import { validateLoginForm } from '../../utils/validation';
 
 export default function LoginScreen() {
@@ -117,7 +118,7 @@ export default function LoginScreen() {
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <Link href="/screens/auth/SignupScreen" asChild>
+            <Link href="/auth/SignupScreen" asChild>
               <TouchableOpacity disabled={loading}>
                 <Text style={styles.signupLink}>Sign Up</Text>
               </TouchableOpacity>

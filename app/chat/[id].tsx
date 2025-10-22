@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View
 } from 'react-native';
 import DateSeparator from '../../components/DateSeparator';
@@ -12,6 +13,7 @@ import MessageBubble, { Message } from '../../components/MessageBubble';
 import MessageInput from '../../components/MessageInput';
 import { useAuth } from '../../hooks/useAuth';
 import { useMessages } from '../../hooks/useMessages';
+import { getConversation, ConversationData } from '../../services/firestoreService';
 import { shouldShowDateSeparator } from '../../utils/dateUtils';
 
 export default function ChatScreen() {
@@ -31,6 +33,27 @@ export default function ChatScreen() {
   } = useMessages(id);
 
   const [isTyping, setIsTyping] = useState(false);
+  const [conversation, setConversation] = useState<ConversationData | null>(null);
+  const [loadingConversation, setLoadingConversation] = useState(true);
+
+  // Fetch conversation data to determine if it's a group chat
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchConversation = async () => {
+      setLoadingConversation(true);
+      try {
+        const conv = await getConversation(id);
+        setConversation(conv);
+      } catch (error) {
+        console.error('Error fetching conversation:', error);
+      } finally {
+        setLoadingConversation(false);
+      }
+    };
+
+    fetchConversation();
+  }, [id]);
 
   // Convert Firestore messages to UI format and add date separators
   type ListItem =
@@ -65,6 +88,7 @@ export default function ChatScreen() {
           timestamp: msg.timestamp,
           status: msg.status,
           isOwn: msg.senderId === user?.uid,
+          readBy: msg.readBy,
         },
       });
     });
@@ -122,8 +146,9 @@ export default function ChatScreen() {
     return (
       <MessageBubble
         message={item.data}
-        showSenderName={false} // Set to true for group chats
+        showSenderName={conversation?.isGroup || false}
         previousMessageSameSender={isSameSender}
+        totalParticipants={conversation?.participants.length || 0}
       />
     );
   };
@@ -161,7 +186,7 @@ export default function ChatScreen() {
     }
   };
 
-  if (loading) {
+  if (loading || loadingConversation) {
     return (
       <View style={[styles.container, styles.centerContent]}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -181,6 +206,16 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Group Info Button (if group chat) */}
+      {conversation?.isGroup && (
+        <TouchableOpacity
+          style={styles.groupInfoButton}
+          onPress={() => router.push(`/group/info/${id}`)}
+        >
+          <Text style={styles.groupInfoButtonText}>ℹ️ Group Info</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Messages List */}
       <FlatList
         ref={flatListRef}
@@ -269,5 +304,18 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  groupInfoButton: {
+    backgroundColor: '#F2F2F7',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
+  },
+  groupInfoButtonText: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: '600',
   },
 });

@@ -63,8 +63,24 @@ export default function ChatListScreen() {
   };
 
   const handleNewChat = () => {
-    // TODO: Navigate to new chat screen
-    console.log('New chat');
+    Alert.alert(
+      'New Chat',
+      'What would you like to create?',
+      [
+        {
+          text: 'Group Chat',
+          onPress: () => router.push('/group/create'),
+        },
+        {
+          text: 'Test Conversation',
+          onPress: createTestConversation,
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const createTestConversation = async () => {

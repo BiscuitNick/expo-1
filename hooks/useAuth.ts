@@ -24,7 +24,7 @@ export interface UseAuthReturn {
   isAuthenticated: boolean;
 
   // Actions
-  signUp: (data: SignUpData) => Promise<void>;
+  signUp: (data: SignUpData) => Promise<AuthUser>;
   signIn: (data: SignInData) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;
@@ -53,6 +53,7 @@ export const useAuth = (): UseAuthReturn => {
       setError(null);
       const userData = await signUp(data);
       setUser(userData);
+      return userData; // Return user data for further processing
     } catch (err: any) {
       const errorMessage = getAuthErrorMessage(err);
       setError(errorMessage);

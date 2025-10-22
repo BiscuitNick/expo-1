@@ -15,8 +15,13 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
 
-  // Note: Auth guard removed - tabs are now accessible without authentication
-  // Individual screens can check auth status and show appropriate content
+  // Redirect to login if not authenticated (and not loading)
+  useEffect(() => {
+    if (!loading && !user) {
+      // User is not authenticated, redirect to login
+      router.replace('/auth/LoginScreen');
+    }
+  }, [user, loading]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -49,6 +54,34 @@ export default function RootLayout() {
           options={{
             headerShown: false,
             title: 'Complete Profile'
+          }}
+        />
+        <Stack.Screen
+          name="chat/[id]"
+          options={{
+            headerShown: true,
+            title: 'Chat'
+          }}
+        />
+        <Stack.Screen
+          name="group/create"
+          options={{
+            headerShown: true,
+            title: 'Create Group'
+          }}
+        />
+        <Stack.Screen
+          name="group/info/[id]"
+          options={{
+            headerShown: true,
+            title: 'Group Info'
+          }}
+        />
+        <Stack.Screen
+          name="group/add-members/[id]"
+          options={{
+            headerShown: true,
+            title: 'Add Members'
           }}
         />
       </Stack>

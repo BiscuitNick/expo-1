@@ -3,6 +3,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View
@@ -53,6 +54,14 @@ export default function MessageInput({
     }
   };
 
+  const handleKeyPress = (e: any) => {
+    // On web, allow Enter to submit (unless Shift is held for new line)
+    if (Platform.OS === 'web' && e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   const canSend = text.trim().length > 0 && !disabled;
 
   return (
@@ -73,22 +82,37 @@ export default function MessageInput({
             editable={!disabled}
             blurOnSubmit={false}
             onSubmitEditing={handleSend}
+            onKeyPress={handleKeyPress}
+            returnKeyType="send"
           />
 
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              canSend ? styles.sendButtonActive : styles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!canSend}
-          >
-            <IconSymbol
-              name="arrow.up.circle.fill"
-              size={32}
-              color={canSend ? '#007AFF' : '#C7C7CC'}
-            />
-          </TouchableOpacity>
+          {Platform.OS === 'web' ? (
+            <TouchableOpacity
+              style={[
+                styles.webSendButton,
+                canSend ? styles.webSendButtonActive : styles.webSendButtonDisabled,
+              ]}
+              onPress={handleSend}
+              disabled={!canSend}
+            >
+              <Text style={styles.webSendButtonText}>Send</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                canSend ? styles.sendButtonActive : styles.sendButtonDisabled,
+              ]}
+              onPress={handleSend}
+              disabled={!canSend}
+            >
+              <IconSymbol
+                name="arrow.up.circle.fill"
+                size={32}
+                color={canSend ? '#007AFF' : '#C7C7CC'}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -101,7 +125,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -128,5 +153,24 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  webSendButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  webSendButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  webSendButtonDisabled: {
+    backgroundColor: '#C7C7CC',
+  },
+  webSendButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

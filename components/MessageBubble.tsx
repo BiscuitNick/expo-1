@@ -14,18 +14,21 @@ export interface Message {
   timestamp: Date;
   status?: 'sending' | 'sent' | 'delivered' | 'read';
   isOwn: boolean;
+  readBy?: string[];
 }
 
 interface MessageBubbleProps {
   message: Message;
   showSenderName?: boolean; // For group chats
   previousMessageSameSender?: boolean;
+  totalParticipants?: number; // For group delivery tracking
 }
 
 export default function MessageBubble({
   message,
   showSenderName = false,
   previousMessageSameSender = false,
+  totalParticipants = 0,
 }: MessageBubbleProps) {
   const getStatusIcon = () => {
     switch (message.status) {
@@ -40,6 +43,19 @@ export default function MessageBubble({
       default:
         return '';
     }
+  };
+
+  const getGroupDeliveryStatus = () => {
+    if (!message.isOwn || !message.readBy || totalParticipants === 0) return '';
+
+    const readCount = message.readBy.length;
+    // Subtract 1 to exclude the sender from the count
+    const othersReadCount = readCount - 1;
+    const totalOthers = totalParticipants - 1;
+
+    if (othersReadCount === 0) return '';
+    if (othersReadCount === totalOthers) return `Read by all`;
+    return `Read by ${othersReadCount}`;
   };
 
   return (
@@ -91,6 +107,13 @@ export default function MessageBubble({
               ]}
             >
               {getStatusIcon()}
+            </Text>
+          )}
+
+          {/* Group delivery status */}
+          {showSenderName && getGroupDeliveryStatus() && (
+            <Text style={styles.groupDeliveryStatus}>
+              • {getGroupDeliveryStatus()}
             </Text>
           )}
         </View>
@@ -164,5 +187,10 @@ const styles = StyleSheet.create({
   },
   readStatus: {
     color: '#4CAF50',
+  },
+  groupDeliveryStatus: {
+    fontSize: 10,
+    color: 'rgba(255, 255, 255, 0.6)',
+    marginLeft: 4,
   },
 });

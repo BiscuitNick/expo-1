@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../hooks/useAuth';
+import { createUserProfile } from '../../services/userService';
 import { validateSignupForm } from '../../utils/validation';
 
 export default function SignupScreen() {
@@ -44,11 +45,24 @@ export default function SignupScreen() {
     if (!validateForm()) return;
 
     try {
-      await signUp({ email, password, displayName });
+      const userData = await signUp({ email, password, displayName });
       console.log('Signup successful');
-      
-      // Navigate to profile setup screen
-      router.push('/auth/ProfileSetupScreen');
+
+      // Create user profile in Firestore
+      try {
+        await createUserProfile({
+          uid: userData.uid,
+          email: userData.email || email,
+          displayName: userData.displayName || displayName,
+        });
+        console.log('User profile created in Firestore');
+      } catch (profileError) {
+        console.error('Error creating user profile:', profileError);
+        // Don't block signup if profile creation fails
+      }
+
+      // Navigate to main app
+      router.replace('/(tabs)');
     } catch (error) {
       // Error is handled by useAuth hook
       console.error('Signup error:', error);
@@ -186,7 +200,7 @@ export default function SignupScreen() {
 
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>Already have an account? </Text>
-            <Link href="/screens/auth/LoginScreen" asChild>
+            <Link href="/auth/LoginScreen" asChild>
               <TouchableOpacity disabled={loading}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </TouchableOpacity>

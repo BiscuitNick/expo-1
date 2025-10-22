@@ -307,7 +307,7 @@ export const createGroupConversation = async (
   groupAvatar?: string
 ): Promise<string> => {
   try {
-    const conversationData = {
+    const conversationData: any = {
       participants,
       participantDetails,
       lastMessage: '',
@@ -315,15 +315,140 @@ export const createGroupConversation = async (
       lastMessageSenderId: '',
       isGroup: true,
       groupName,
-      groupAvatar,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
+
+    // Only add groupAvatar if it's provided (Firestore doesn't allow undefined)
+    if (groupAvatar) {
+      conversationData.groupAvatar = groupAvatar;
+    }
 
     const docRef = await addDoc(collection(db, CONVERSATIONS_COLLECTION), conversationData);
     return docRef.id;
   } catch (error) {
     console.error('Error creating group conversation:', error);
+    throw error;
+  }
+};
+
+// Get all users (for user selection in group creation)
+export interface UserProfile {
+  uid: string;
+  displayName: string;
+  email: string;
+  photoURL?: string;
+}
+
+export const getAllUsers = async (): Promise<UserProfile[]> => {
+  try {
+    const usersSnapshot = await getDocs(collection(db, USERS_COLLECTION));
+    const users = usersSnapshot.docs.map(doc => ({
+      uid: doc.id,
+      ...doc.data(),
+    } as UserProfile));
+
+    console.log('🔍 getAllUsers() returned:', users.length, 'users');
+    console.log('User details:', users.map(u => ({ uid: u.uid, name: u.displayName, email: u.email })));
+
+    return users;
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    throw error;
+  }
+};
+
+// Add members to a group conversation
+export const addMembersToGroup = async (
+  conversationId: string,
+  newMemberIds: string[],
+  newMemberDetails: { [userId: string]: { displayName: string; photoURL?: string; email: string } }
+): Promise<void> => {
+  try {
+    const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+    const conversationDoc = await getDoc(conversationRef);
+
+    if (!conversationDoc.exists()) {
+      throw new Error('Conversation not found');
+    }
+
+    const data = conversationDoc.data();
+    const currentParticipants = data.participants || [];
+    const currentParticipantDetails = data.participantDetails || {};
+
+    // Filter out members that are already in the group
+    const membersToAdd = newMemberIds.filter(id => !currentParticipants.includes(id));
+
+    if (membersToAdd.length === 0) {
+      console.log('All selected members are already in the group');
+      return;
+    }
+
+    // Merge participant details
+    const updatedParticipantDetails = {
+      ...currentParticipantDetails,
+      ...newMemberDetails,
+    };
+
+    // Update the conversation with new members
+    await updateDoc(conversationRef, {
+      participants: [...currentParticipants, ...membersToAdd],
+      participantDetails: updatedParticipantDetails,
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log(`Added ${membersToAdd.length} new members to group`);
+  } catch (error) {
+    console.error('Error adding members to group:', error);
+    throw error;
+  }
+};
+
+// Remove a member from a group conversation
+export const removeMemberFromGroup = async (
+  conversationId: string,
+  memberId: string
+): Promise<void> => {
+  try {
+    const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+    const conversationDoc = await getDoc(conversationRef);
+
+    if (!conversationDoc.exists()) {
+      throw new Error('Conversation not found');
+    }
+
+    const data = conversationDoc.data();
+    const currentParticipants = data.participants || [];
+    const currentParticipantDetails = data.participantDetails || {};
+
+    // Check if user is in the group
+    if (!currentParticipants.includes(memberId)) {
+      throw new Error('User is not a member of this group');
+    }
+
+    // Remove the member from participants
+    const updatedParticipants = currentParticipants.filter((id: string) => id !== memberId);
+
+    // Remove member from participant details
+    const updatedParticipantDetails = { ...currentParticipantDetails };
+    delete updatedParticipantDetails[memberId];
+
+    // If this is the last member, you might want to delete the conversation
+    // For now, we'll just update it
+    if (updatedParticipants.length === 0) {
+      console.warn('Last member leaving group - conversation will be empty');
+    }
+
+    // Update the conversation
+    await updateDoc(conversationRef, {
+      participants: updatedParticipants,
+      participantDetails: updatedParticipantDetails,
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log(`Removed member ${memberId} from group`);
+  } catch (error) {
+    console.error('Error removing member from group:', error);
     throw error;
   }
 };
