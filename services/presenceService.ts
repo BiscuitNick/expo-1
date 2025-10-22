@@ -1,5 +1,6 @@
 import {
     doc,
+    getDoc,
     getFirestore,
     onSnapshot,
     serverTimestamp,
@@ -34,8 +35,9 @@ export const setUserOnline = async (uid: string): Promise<void> => {
       lastSeen: serverTimestamp(),
       status: 'online',
     });
+    console.log('✅ User presence updated to ONLINE:', uid);
   } catch (error) {
-    console.error('Error setting user online:', error);
+    console.error('❌ Error setting user online:', uid, error);
     throw error;
   }
 };
@@ -49,8 +51,9 @@ export const setUserOffline = async (uid: string): Promise<void> => {
       lastSeen: serverTimestamp(),
       status: 'offline',
     });
+    console.log('📴 User presence updated to OFFLINE:', uid);
   } catch (error) {
-    console.error('Error setting user offline:', error);
+    console.error('❌ Error setting user offline:', uid, error);
     throw error;
   }
 };
@@ -87,8 +90,8 @@ export const updateLastSeen = async (uid: string): Promise<void> => {
 export const getUserPresence = async (uid: string): Promise<UserPresence | null> => {
   try {
     const userRef = doc(db, 'users', uid);
-    const userSnap = await userRef.get();
-    
+    const userSnap = await getDoc(userRef);
+
     if (userSnap.exists()) {
       const data = userSnap.data();
       return {
@@ -98,7 +101,7 @@ export const getUserPresence = async (uid: string): Promise<UserPresence | null>
         status: data.status || 'offline',
       };
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error getting user presence:', error);
@@ -184,20 +187,24 @@ export class PresenceManager {
   public async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
+    console.log('🔄 Initializing PresenceManager for user:', this.uid);
+
     try {
       // Set user online initially
       await setUserOnline(this.uid!);
-      
+      console.log('✅ User set to online:', this.uid);
+
       // Set up app state listener
       this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
-      
+
       // Set up periodic last seen updates
       this.startPeriodicUpdates();
-      
+
       this.isInitialized = true;
+      console.log('✅ PresenceManager initialized successfully');
     } catch (error) {
-      console.error('Error initializing presence manager:', error);
-      throw error;
+      console.error('❌ Error initializing presence manager:', error);
+      // Don't throw - allow app to continue even if presence fails
     }
   }
 

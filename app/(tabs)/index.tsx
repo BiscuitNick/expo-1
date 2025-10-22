@@ -14,6 +14,7 @@ import {
 import ConversationItem, { Conversation } from '../../components/ConversationItem';
 import { useAuth } from '../../hooks/useAuth';
 import { useConversations } from '../../hooks/useConversations';
+import { useMultiplePresences } from '../../hooks/usePresence';
 import { createConversation, sendMessage } from '../../services/firestoreService';
 
 export default function ChatListScreen() {
@@ -31,6 +32,22 @@ export default function ChatListScreen() {
     }, 500);
   };
 
+  // Get all participant IDs for presence tracking
+  const participantIds = useMemo(() => {
+    const ids: string[] = [];
+    firestoreConversations.forEach(conv => {
+      if (!conv.isGroup) {
+        // For 1-on-1 chats, get the other participant
+        const otherId = conv.participants.find(id => id !== user?.uid);
+        if (otherId) ids.push(otherId);
+      }
+    });
+    return ids;
+  }, [firestoreConversations, user?.uid]);
+
+  // Subscribe to presence for all participants
+  const presences = useMultiplePresences(participantIds);
+
   // Convert Firestore conversations to UI format
   const conversations: Conversation[] = useMemo(() => {
     if (!user) return []; // Return empty array if no user
@@ -40,6 +57,11 @@ export default function ChatListScreen() {
       const otherParticipant = otherParticipantId
         ? conv.participantDetails[otherParticipantId]
         : null;
+
+      // Get online status for 1-on-1 chats
+      const isOnline = !conv.isGroup && otherParticipantId
+        ? presences[otherParticipantId]?.isOnline || false
+        : false;
 
       return {
         id: conv.id,
@@ -52,11 +74,11 @@ export default function ChatListScreen() {
         lastMessage: conv.lastMessage || 'No messages yet',
         timestamp: conv.lastMessageTimestamp,
         unreadCount: 0, // TODO: Implement unread count
-        isOnline: false, // TODO: Implement online status
+        isOnline: isOnline,
         isGroup: conv.isGroup,
       };
     });
-  }, [firestoreConversations, user?.uid]);
+  }, [firestoreConversations, user?.uid, presences]);
 
   const handleConversationPress = (conversation: Conversation) => {
     router.push(`/chat/${conversation.id}`);

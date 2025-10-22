@@ -1,11 +1,12 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/useAuth';
+import { createPresenceManager, PresenceManager } from '@/services/presenceService';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -14,6 +15,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
+  const presenceManagerRef = useRef<PresenceManager | null>(null);
 
   // Redirect to login if not authenticated (and not loading)
   useEffect(() => {
@@ -22,6 +24,27 @@ export default function RootLayout() {
       router.replace('/auth/LoginScreen');
     }
   }, [user, loading]);
+
+  // Initialize presence tracking when user logs in
+  useEffect(() => {
+    if (user?.uid) {
+      // Create and initialize presence manager
+      presenceManagerRef.current = createPresenceManager(user.uid);
+      presenceManagerRef.current.initialize().catch((error) => {
+        console.error('Failed to initialize presence manager:', error);
+      });
+
+      // Cleanup on unmount or user logout
+      return () => {
+        if (presenceManagerRef.current) {
+          presenceManagerRef.current.cleanup().catch((error) => {
+            console.error('Failed to cleanup presence manager:', error);
+          });
+          presenceManagerRef.current = null;
+        }
+      };
+    }
+  }, [user?.uid]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import StatusIndicator from '../../../components/StatusIndicator';
 import { useAuth } from '../../../hooks/useAuth';
+import { useMultiplePresences } from '../../../hooks/usePresence';
 import { ConversationData, getConversation, removeMemberFromGroup } from '../../../services/firestoreService';
 
 export default function GroupInfoScreen() {
@@ -38,6 +40,27 @@ export default function GroupInfoScreen() {
 
     fetchConversation();
   }, [id]);
+
+  // Subscribe to all members' presence
+  const memberIds = useMemo(() => conversation?.participants || [], [conversation]);
+  const presences = useMultiplePresences(memberIds);
+
+  // Sort members: online first, then by name
+  const sortedMembers = useMemo(() => {
+    if (!conversation) return [];
+    return [...conversation.participants].sort((a, b) => {
+      const aOnline = presences[a]?.isOnline || false;
+      const bOnline = presences[b]?.isOnline || false;
+
+      // Online users first
+      if (aOnline !== bOnline) return aOnline ? -1 : 1;
+
+      // Then sort by name
+      const aName = conversation.participantDetails[a]?.displayName || '';
+      const bName = conversation.participantDetails[b]?.displayName || '';
+      return aName.localeCompare(bName);
+    });
+  }, [conversation, presences]);
 
   const handleLeaveGroup = () => {
     if (!user?.uid || !id) return;
@@ -141,22 +164,39 @@ export default function GroupInfoScreen() {
               <Text style={styles.addButton}>+ Add</Text>
             </TouchableOpacity>
           </View>
-          {conversation.participants.map((participantId) => {
+          {sortedMembers.map((participantId) => {
             const participant = conversation.participantDetails[participantId];
             const isCurrentUser = participantId === user?.uid;
+            const presence = presences[participantId];
+
             return (
               <View key={participantId} style={styles.memberRow}>
-                <View style={styles.memberAvatar}>
-                  <Text style={styles.memberAvatarText}>
-                    {participant?.displayName?.charAt(0).toUpperCase() || '?'}
-                  </Text>
+                <View style={styles.memberAvatarContainer}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberAvatarText}>
+                      {participant?.displayName?.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                  </View>
+                  {presence?.isOnline && (
+                    <View style={styles.memberOnlineDot} />
+                  )}
                 </View>
                 <View style={styles.memberInfo}>
                   <Text style={styles.memberName}>
                     {participant?.displayName || 'Unknown User'}
                     {isCurrentUser && ' (You)'}
                   </Text>
-                  <Text style={styles.memberEmail}>{participant?.email || ''}</Text>
+                  {isCurrentUser ? (
+                    <Text style={styles.memberEmail}>{participant?.email || ''}</Text>
+                  ) : (
+                    <StatusIndicator
+                      isOnline={presence?.isOnline || false}
+                      lastSeen={presence?.lastSeen || undefined}
+                      showText={true}
+                      showDot={false}
+                      size="small"
+                    />
+                  )}
                 </View>
               </View>
             );
@@ -264,6 +304,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
   },
+  memberAvatarContainer: {
+    position: 'relative',
+    marginRight: 12,
+  },
   memberAvatar: {
     width: 48,
     height: 48,
@@ -271,12 +315,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   memberAvatarText: {
     fontSize: 20,
     color: '#fff',
     fontWeight: 'bold',
+  },
+  memberOnlineDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   memberInfo: {
     flex: 1,

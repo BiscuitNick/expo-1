@@ -146,19 +146,13 @@ export const useAuth = (): UseAuthReturn => {
   // Set up auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
+      console.log('🔐 Auth state changed:', user ? `User: ${user.email}` : 'No user');
       setUser(user);
       setLoading(false);
     });
 
     // Cleanup listener on unmount
     return () => unsubscribe();
-  }, []);
-
-  // Initialize user state
-  useEffect(() => {
-    const currentUser = getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
   }, []);
 
   return {

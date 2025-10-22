@@ -11,8 +11,10 @@ import {
 import DateSeparator from '../../components/DateSeparator';
 import MessageBubble, { Message } from '../../components/MessageBubble';
 import MessageInput from '../../components/MessageInput';
+import StatusIndicator from '../../components/StatusIndicator';
 import { useAuth } from '../../hooks/useAuth';
 import { useMessages } from '../../hooks/useMessages';
+import { useUserPresence } from '../../hooks/usePresence';
 import { getConversation, ConversationData } from '../../services/firestoreService';
 import { shouldShowDateSeparator } from '../../utils/dateUtils';
 
@@ -54,6 +56,15 @@ export default function ChatScreen() {
 
     fetchConversation();
   }, [id]);
+
+  // Get other participant ID for 1-on-1 chats
+  const otherParticipantId = useMemo(() => {
+    if (!conversation || conversation.isGroup) return undefined;
+    return conversation.participants.find(pid => pid !== user?.uid);
+  }, [conversation, user?.uid]);
+
+  // Subscribe to other user's presence (for 1-on-1 chats only)
+  const { isOnline, lastSeen } = useUserPresence(otherParticipantId);
 
   // Convert Firestore messages to UI format and add date separators
   type ListItem =
@@ -206,14 +217,26 @@ export default function ChatScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Group Info Button (if group chat) */}
-      {conversation?.isGroup && (
+      {/* Header: Group Info or Online Status */}
+      {conversation?.isGroup ? (
         <TouchableOpacity
           style={styles.groupInfoButton}
           onPress={() => router.push(`/group/info/${id}`)}
         >
           <Text style={styles.groupInfoButtonText}>ℹ️ Group Info</Text>
         </TouchableOpacity>
+      ) : (
+        otherParticipantId && (
+          <View style={styles.statusBar}>
+            <StatusIndicator
+              isOnline={isOnline}
+              lastSeen={lastSeen || undefined}
+              showText={true}
+              showDot={true}
+              size="small"
+            />
+          </View>
+        )
       )}
 
       {/* Messages List */}
@@ -317,5 +340,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#007AFF',
     fontWeight: '600',
+  },
+  statusBar: {
+    backgroundColor: '#F2F2F7',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E5',
   },
 });

@@ -66,7 +66,7 @@ export const createUserProfile = async (userData: CreateUserProfileData): Promis
       email: userData.email,
       displayName: userData.displayName,
       bio: userData.bio || '',
-      isOnline: true,
+      isOnline: false, // Start as offline - PresenceManager will set to online when app is active
       lastSeen: now,
       createdAt: now,
       updatedAt: now,

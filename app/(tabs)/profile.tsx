@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import StatusIndicator from '../../components/StatusIndicator';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function ProfileScreen() {
@@ -76,6 +77,16 @@ export default function ProfileScreen() {
         {/* User Info */}
         <Text style={styles.displayName}>{user.displayName || 'No Name'}</Text>
         <Text style={styles.email}>{user.email}</Text>
+
+        {/* Online Status - Always Active for current user */}
+        <View style={styles.statusContainer}>
+          <StatusIndicator
+            isOnline={true}
+            showText={true}
+            showDot={true}
+            size="medium"
+          />
+        </View>
 
         {/* Email Verification Badge */}
         {user.emailVerified ? (
@@ -172,6 +183,9 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 16,
     color: '#666',
+    marginBottom: 8,
+  },
+  statusContainer: {
     marginBottom: 12,
   },
   verifiedBadge: {
