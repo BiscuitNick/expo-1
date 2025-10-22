@@ -9,6 +9,9 @@ if (Platform.OS === 'web') {
   WebBrowser.maybeCompleteAuthSession();
 }
 
+// Check if we're using the emulator - only if explicitly enabled
+const USE_EMULATOR = process.env.EXPO_PUBLIC_USE_EMULATOR === 'true';
+
 // Google OAuth configuration
 // For expo-auth-session with PKCE, use Web client ID for all platforms
 // This is the recommended approach as it works consistently across platforms
@@ -19,11 +22,20 @@ const GOOGLE_CLIENT_SECRET = Platform.OS === 'web'
   : undefined;
 
 // Use platform-specific redirect URI
-// For native: use Expo's auth proxy (requires HTTPS for Google OAuth)
-// For web: use localhost
-const GOOGLE_REDIRECT_URI = Platform.OS === 'web'
-  ? 'http://localhost:8081'
-  : 'https://auth.expo.io/@anonymous/expo-1';
+// When using emulator, use localhost-based URIs
+const GOOGLE_REDIRECT_URI = USE_EMULATOR
+  ? Platform.select({
+      ios: 'http://localhost:8081',
+      android: 'http://10.0.2.2:8081',
+      web: 'http://localhost:8081',
+      default: 'http://localhost:8081',
+    })
+  : Platform.select({
+      ios: 'https://auth.expo.io/@nickkenkel/expo-1',
+      android: 'https://auth.expo.io/@nickkenkel/expo-1',
+      web: 'http://localhost:8081',
+      default: AuthSession.makeRedirectUri({ useProxy: true }),
+    });
 
 // Google OAuth endpoints
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -47,9 +59,17 @@ export interface GoogleAuthConfig {
 
 // Get Google OAuth configuration
 export const getGoogleAuthConfig = (): GoogleAuthConfig => {
+  // Make sure we're using the correct redirect URI
+  const redirectUri = Platform.select({
+    ios: 'https://auth.expo.io/@nickkenkel/expo-1',
+    android: 'https://auth.expo.io/@nickkenkel/expo-1',
+    web: 'http://localhost:8081',
+    default: GOOGLE_REDIRECT_URI,
+  }) || GOOGLE_REDIRECT_URI;
+
   return {
     clientId: GOOGLE_CLIENT_ID!,
-    redirectUri: GOOGLE_REDIRECT_URI,
+    redirectUri: redirectUri,
   };
 };
 
@@ -171,11 +191,14 @@ export const authenticateWithGoogle = async (): Promise<GoogleAuthResult> => {
       throw new Error('Google Client ID is not configured for this platform');
     }
 
-    console.log('Starting Google OAuth flow...');
-    console.log('Client ID:', GOOGLE_CLIENT_ID);
-    console.log('Redirect URI:', GOOGLE_REDIRECT_URI);
-
     const config = getGoogleAuthConfig();
+
+    console.log('=== Google OAuth Flow ===');
+    console.log('Emulator Mode:', USE_EMULATOR ? 'YES (using localhost)' : 'NO (using production)');
+    console.log('Client ID:', config.clientId);
+    console.log('Redirect URI:', config.redirectUri);
+    console.log('Platform:', Platform.OS);
+    console.log('========================');
 
     // Create auth request - let AuthSession handle PKCE automatically
     const request = new AuthSession.AuthRequest({

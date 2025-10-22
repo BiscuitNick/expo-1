@@ -1,10 +1,8 @@
 import {
     AuthError,
     createUserWithEmailAndPassword,
-    GoogleAuthProvider,
     onAuthStateChanged,
     sendPasswordResetEmail,
-    signInWithCredential,
     signInWithEmailAndPassword,
     signOut,
     updateProfile,
@@ -31,11 +29,6 @@ export interface SignUpData {
 export interface SignInData {
   email: string;
   password: string;
-}
-
-export interface GoogleSignInData {
-  idToken: string;
-  accessToken: string;
 }
 
 export interface UpdateProfileData {
@@ -97,19 +90,6 @@ export const signIn = async (data: SignInData): Promise<AuthUser> => {
     return mapFirebaseUser(userCredential.user)!;
   } catch (error) {
     console.error('Sign in error:', error);
-    throw error;
-  }
-};
-
-// Sign in with Google
-export const signInWithGoogle = async (data: GoogleSignInData): Promise<AuthUser> => {
-  try {
-    const credential = GoogleAuthProvider.credential(data.idToken, data.accessToken);
-    const userCredential: UserCredential = await signInWithCredential(auth, credential);
-
-    return mapFirebaseUser(userCredential.user)!;
-  } catch (error) {
-    console.error('Google sign in error:', error);
     throw error;
   }
 };

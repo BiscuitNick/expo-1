@@ -9,12 +9,14 @@ import {
     resetPassword,
     signIn,
     SignInData,
+    signInWithGoogle as firebaseSignInWithGoogle,
     signOutUser,
     signUp,
     SignUpData,
     UpdateProfileData,
     updateUserProfile
 } from '../services/authService';
+import { signInWithGoogleFixed } from '../services/googleAuthWorkingFix';
 
 export interface UseAuthReturn {
   // State
@@ -26,6 +28,7 @@ export interface UseAuthReturn {
   // Actions
   signUp: (data: SignUpData) => Promise<void>;
   signIn: (data: SignInData) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: UpdateProfileData) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -78,6 +81,43 @@ export const useAuth = (): UseAuthReturn => {
     }
   }, []);
 
+  // Google sign in function - Using the FIXED implementation
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      console.log('Starting Google Sign-In with fixed implementation...');
+
+      // Use the fixed Google Sign-In that ensures HTTPS redirect URI
+      const googleResult = await signInWithGoogleFixed();
+
+      console.log('Google auth successful, signing into Firebase...');
+
+      // Sign in with Firebase using Google credentials
+      const userData = await firebaseSignInWithGoogle({
+        idToken: googleResult.idToken,
+        accessToken: googleResult.accessToken,
+      });
+
+      setUser(userData);
+      console.log('Firebase sign-in successful');
+    } catch (err: any) {
+      // Don't set error state if user cancelled
+      if (err?.message === 'USER_CANCELLED') {
+        console.log('User cancelled Google sign-in');
+        return;
+      }
+
+      const errorMessage = getAuthErrorMessage(err);
+      console.error('Google Sign-In error:', errorMessage);
+      setError(errorMessage);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Sign out function
   const handleSignOut = useCallback(async () => {
     try {
@@ -100,7 +140,7 @@ export const useAuth = (): UseAuthReturn => {
       setLoading(true);
       setError(null);
       await updateUserProfile(data);
-      
+
       // Update local user state
       if (user) {
         setUser({
@@ -170,6 +210,7 @@ export const useAuth = (): UseAuthReturn => {
     // Actions
     signUp: handleSignUp,
     signIn: handleSignIn,
+    signInWithGoogle: handleGoogleSignIn,
     signOut: handleSignOut,
     updateProfile: handleUpdateProfile,
     resetPassword: handleResetPassword,

@@ -46,3 +46,15 @@ app-example
 # Firebase config files (contain sensitive keys)
 GoogleService-Info.plist
 google-services.json
+
+# Firebase Emulator data
+emulator-data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# Documentation files with potential secrets
+*OAUTH*.md
+*AUTH_FIX*.md
+*CLIENT*.md

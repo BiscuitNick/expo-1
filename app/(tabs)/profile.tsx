@@ -39,10 +39,20 @@ export default function ProfileScreen() {
     );
   };
 
+  // Show login prompt if not authenticated
   if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>No user data available</Text>
+      <View style={styles.authPromptContainer}>
+        <Text style={styles.authPromptTitle}>Sign in to view profile</Text>
+        <Text style={styles.authPromptSubtitle}>
+          You need to be logged in to access your profile
+        </Text>
+        <TouchableOpacity
+          style={styles.authPromptButton}
+          onPress={() => router.push('/auth/GoogleAuthScreen')}
+        >
+          <Text style={styles.authPromptButtonText}>Go to Sign In</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -236,5 +246,35 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     textAlign: 'center',
     marginTop: 20,
+  },
+  authPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  authPromptTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  authPromptSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  authPromptButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  authPromptButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

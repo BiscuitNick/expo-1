@@ -15,14 +15,8 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { user, loading } = useAuth();
 
-  // Redirect to auth screen if not authenticated
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        router.replace('/auth/GoogleAuthScreen');
-      }
-    }
-  }, [user, loading]);
+  // Note: Auth guard removed - tabs are now accessible without authentication
+  // Individual screens can check auth status and show appropriate content
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>

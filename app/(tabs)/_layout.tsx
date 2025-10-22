@@ -25,11 +25,25 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="firebase-test"
+        options={{
+          title: 'Status',
+          headerTitle: 'Firebase Status',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="checkmark.circle.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           headerTitle: 'My Profile',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="explore"
+        options={{
+          href: null, // Hide explore from tabs
         }}
       />
     </Tabs>

@@ -1,7 +1,7 @@
 import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { app } from '../../firebaseConfig';
 import { useAuth } from '../../hooks/useAuth';
 import { generateMockData } from '../../utils/mockDataGenerator';
@@ -11,12 +11,26 @@ export default function FirebaseTestScreen() {
   const [connectionStatus, setConnectionStatus] = useState<string>('Testing...');
   const [authStatus, setAuthStatus] = useState<string>('Not authenticated');
   const [firestoreStatus, setFirestoreStatus] = useState<string>('Not tested');
+  const [emulatorStatus, setEmulatorStatus] = useState<string>('Checking...');
   const [testResults, setTestResults] = useState<string[]>([]);
   const [isGeneratingMockData, setIsGeneratingMockData] = useState(false);
 
   useEffect(() => {
+    checkEmulatorStatus();
     testFirebaseConnection();
   }, []);
+
+  const checkEmulatorStatus = () => {
+    const useEmulator = process.env.EXPO_PUBLIC_USE_EMULATOR === 'true';
+    if (useEmulator) {
+      setEmulatorStatus(`✅ Using Emulator (localhost:9099)`);
+      addTestResult('🔥 Firebase Auth Emulator is ENABLED');
+      addTestResult(`Platform: ${Platform.OS}`);
+    } else {
+      setEmulatorStatus('⚠️ Using Production Firebase');
+      addTestResult('☁️ Using PRODUCTION Firebase (not emulator)');
+    }
+  };
 
   const addTestResult = (result: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${result}`]);
@@ -150,6 +164,11 @@ export default function FirebaseTestScreen() {
       </View>
 
       <View style={styles.statusContainer}>
+        <View style={styles.statusItem}>
+          <Text style={styles.statusLabel}>Environment:</Text>
+          <Text style={styles.statusValue}>{emulatorStatus}</Text>
+        </View>
+
         <View style={styles.statusItem}>
           <Text style={styles.statusLabel}>Firebase App:</Text>
           <Text style={styles.statusValue}>{connectionStatus}</Text>

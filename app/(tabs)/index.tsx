@@ -33,6 +33,7 @@ export default function ChatListScreen() {
 
   // Convert Firestore conversations to UI format
   const conversations: Conversation[] = useMemo(() => {
+    if (!user) return []; // Return empty array if no user
     return firestoreConversations.map(conv => {
       // Get the other participant's info (for 1-on-1 chats)
       const otherParticipantId = conv.participants.find(id => id !== user?.uid);
@@ -185,6 +186,24 @@ export default function ChatListScreen() {
     );
   };
 
+  // Show login prompt if not authenticated
+  if (!user) {
+    return (
+      <View style={styles.authPromptContainer}>
+        <Text style={styles.authPromptTitle}>Sign in to view chats</Text>
+        <Text style={styles.authPromptSubtitle}>
+          You need to be logged in to access your messages
+        </Text>
+        <TouchableOpacity
+          style={styles.authPromptButton}
+          onPress={() => router.push('/auth/GoogleAuthScreen')}
+        >
+          <Text style={styles.authPromptButtonText}>Go to Sign In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Search Bar */}
@@ -313,5 +332,35 @@ const styles = StyleSheet.create({
     fontSize: 32,
     color: '#fff',
     fontWeight: '300',
+  },
+  authPromptContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  authPromptTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+  },
+  authPromptSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  authPromptButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  authPromptButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

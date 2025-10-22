@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -33,6 +33,8 @@ export default function LoginScreen() {
     try {
       await signIn({ email, password });
       console.log('Login successful');
+      // Redirect to main app after successful login
+      router.replace('/(tabs)');
     } catch (error) {
       // Error is handled by useAuth hook
       console.error('Login error:', error);
