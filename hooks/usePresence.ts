@@ -21,6 +21,7 @@ export const useUserPresence = (userId: string | undefined): UsePresenceReturn =
     setLoading(true);
 
     const listener = listenToUserPresence(userId, (newPresence) => {
+      console.log('👤 Presence update for user:', userId, 'isOnline:', newPresence?.isOnline, 'status:', newPresence?.status);
       setPresence(newPresence);
       setLoading(false);
     });

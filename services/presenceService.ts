@@ -177,7 +177,10 @@ export class PresenceManager {
   private appStateSubscription: any = null;
   private lastActiveTime: number = Date.now();
   private awayTimeout: NodeJS.Timeout | null = null;
-  private readonly AWAY_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  private activityCheckInterval: NodeJS.Timeout | null = null;
+  private readonly AWAY_TIMEOUT = 3 * 60 * 1000; // 3 minutes of inactivity = away
+  private readonly OFFLINE_TIMEOUT = 5 * 60 * 1000; // 5 minutes of inactivity = offline
+  private readonly ACTIVITY_CHECK_INTERVAL = 30 * 1000; // Check every 30 seconds
 
   constructor(uid: string) {
     this.uid = uid;
@@ -197,14 +200,26 @@ export class PresenceManager {
       // Set up app state listener
       this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
 
-      // Set up periodic last seen updates
-      this.startPeriodicUpdates();
+      // Start activity-based presence checking
+      this.startActivityMonitoring();
 
       this.isInitialized = true;
       console.log('✅ PresenceManager initialized successfully');
     } catch (error) {
       console.error('❌ Error initializing presence manager:', error);
       // Don't throw - allow app to continue even if presence fails
+    }
+  }
+
+  // Record user activity (called whenever user interacts with the app)
+  public recordActivity(): void {
+    this.lastActiveTime = Date.now();
+
+    // If user was away/offline, set them back to online
+    if (this.uid && this.isInitialized) {
+      setUserOnline(this.uid).catch((error) => {
+        console.error('Error setting user online after activity:', error);
+      });
     }
   }
 
@@ -232,13 +247,7 @@ export class PresenceManager {
     if (!this.uid) return;
 
     try {
-      // Clear away timeout
-      if (this.awayTimeout) {
-        clearTimeout(this.awayTimeout);
-        this.awayTimeout = null;
-      }
-
-      // Set user online
+      // Set user online and record activity
       await setUserOnline(this.uid);
       this.lastActiveTime = Date.now();
     } catch (error) {
@@ -251,42 +260,42 @@ export class PresenceManager {
     if (!this.uid) return;
 
     try {
-      // Set user away initially
+      // Set user away when app goes to background
       await setUserAway(this.uid);
-      
-      // Set timeout to go offline
-      this.awayTimeout = setTimeout(async () => {
-        try {
-          await setUserOffline(this.uid!);
-        } catch (error) {
-          console.error('Error setting user offline after timeout:', error);
-        }
-      }, this.AWAY_TIMEOUT);
     } catch (error) {
       console.error('Error handling app inactive:', error);
     }
   }
 
-  // Start periodic updates for last seen
-  private startPeriodicUpdates(): void {
-    setInterval(async () => {
+  // Start monitoring user activity
+  private startActivityMonitoring(): void {
+    // Check activity level every 30 seconds
+    this.activityCheckInterval = setInterval(async () => {
       if (!this.uid || !this.isInitialized) return;
 
+      // Only check if app is in foreground
+      if (AppState.currentState !== 'active') return;
+
       try {
-        // Only update if user is active and app is in foreground
-        if (AppState.currentState === 'active') {
-          const now = Date.now();
-          const timeSinceLastActive = now - this.lastActiveTime;
-          
-          // If user has been active recently, update last seen
-          if (timeSinceLastActive < this.AWAY_TIMEOUT) {
-            await updateLastSeen(this.uid);
-          }
+        const now = Date.now();
+        const timeSinceLastActive = now - this.lastActiveTime;
+
+        if (timeSinceLastActive >= this.OFFLINE_TIMEOUT) {
+          // User has been inactive for 5+ minutes - set offline
+          await setUserOffline(this.uid);
+          console.log('📴 User set to offline due to inactivity:', this.uid);
+        } else if (timeSinceLastActive >= this.AWAY_TIMEOUT) {
+          // User has been inactive for 3-5 minutes - set away
+          await setUserAway(this.uid);
+          console.log('⏰ User set to away due to inactivity:', this.uid);
+        } else {
+          // User is active - update last seen
+          await updateLastSeen(this.uid);
         }
       } catch (error) {
-        console.error('Error in periodic presence update:', error);
+        console.error('Error in activity monitoring:', error);
       }
-    }, 30000); // Update every 30 seconds
+    }, this.ACTIVITY_CHECK_INTERVAL);
   }
 
   // Cleanup presence management
@@ -297,6 +306,12 @@ export class PresenceManager {
       // Set user offline
       if (this.uid) {
         await setUserOffline(this.uid);
+      }
+
+      // Clear activity check interval
+      if (this.activityCheckInterval) {
+        clearInterval(this.activityCheckInterval);
+        this.activityCheckInterval = null;
       }
 
       // Clear away timeout

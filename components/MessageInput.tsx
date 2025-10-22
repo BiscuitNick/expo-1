@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { PresenceManagerContext } from '../app/_layout';
 import { IconSymbol } from './ui/icon-symbol';
 
 interface MessageInputProps {
@@ -27,9 +28,13 @@ export default function MessageInput({
 }: MessageInputProps) {
   const [text, setText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const presenceManager = useContext(PresenceManagerContext);
 
   const handleSend = () => {
     if (text.trim().length === 0) return;
+
+    // Record activity
+    presenceManager?.recordActivity();
 
     onSend(text.trim());
     setText('');
@@ -43,6 +48,9 @@ export default function MessageInput({
 
   const handleChangeText = (newText: string) => {
     setText(newText);
+
+    // Record activity when typing
+    presenceManager?.recordActivity();
 
     // Trigger typing indicator
     if (newText.length > 0 && !isTyping) {

@@ -1,4 +1,4 @@
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, getFirestore, setDoc } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -94,17 +94,17 @@ export default function FirebaseTestScreen() {
       // Listen for auth state changes
       onAuthStateChanged(auth, (user) => {
         if (user) {
-          setAuthStatus(`✅ Authenticated as: ${user.uid}`);
-          addTestResult(`Authentication: SUCCESS (UID: ${user.uid})`);
+          setAuthStatus(`✅ Authenticated as: ${user.email || user.uid}`);
+          addTestResult(`Authentication: SUCCESS (UID: ${user.uid}, Email: ${user.email || 'none'})`);
         } else {
           setAuthStatus('❌ Not authenticated');
           addTestResult('Authentication: NOT AUTHENTICATED');
         }
       });
 
-      // Try anonymous authentication
-      await signInAnonymously(auth);
-      
+      // Check current authentication status (removed anonymous auth)
+      addTestResult('Checking if user is already authenticated...');
+
     } catch (error) {
       setAuthStatus('❌ Authentication failed');
       addTestResult(`Authentication test failed: ${error}`);

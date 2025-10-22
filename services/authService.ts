@@ -40,12 +40,6 @@ export interface UpdateProfileData {
 const mapFirebaseUser = (user: User | null): AuthUser | null => {
   if (!user) return null;
 
-  // Only return user if they have an email (not anonymous)
-  if (!user.email) {
-    console.warn('User has no email - treating as not authenticated');
-    return null;
-  }
-
   return {
     uid: user.uid,
     email: user.email,
@@ -142,10 +136,9 @@ export const onAuthStateChange = (callback: (user: AuthUser | null) => void) => 
   });
 };
 
-// Check if user is authenticated (with email)
+// Check if user is authenticated
 export const isAuthenticated = (): boolean => {
-  const user = auth.currentUser;
-  return !!(user && user.email);
+  return !!auth.currentUser;
 };
 
 // Get user ID

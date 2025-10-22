@@ -44,6 +44,12 @@ export interface ConversationData {
   groupAvatar?: string;
   createdAt: Date;
   updatedAt: Date;
+  typingUsers?: {
+    [userId: string]: {
+      displayName: string;
+      timestamp: Timestamp;
+    };
+  };
 }
 
 export interface MessageData {
@@ -451,6 +457,103 @@ export const removeMemberFromGroup = async (
     console.error('Error removing member from group:', error);
     throw error;
   }
+};
+
+// Typing Indicators
+export const setUserTyping = async (
+  conversationId: string,
+  userId: string,
+  displayName: string
+): Promise<void> => {
+  try {
+    const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+
+    if (!conversationSnap.exists()) {
+      throw new Error('Conversation not found');
+    }
+
+    const typingUsers = conversationSnap.data().typingUsers || {};
+
+    // Add this user to typing users
+    typingUsers[userId] = {
+      displayName,
+      timestamp: serverTimestamp(),
+    };
+
+    await updateDoc(conversationRef, {
+      typingUsers,
+    });
+  } catch (error) {
+    console.error('Error setting user typing:', error);
+    throw error;
+  }
+};
+
+export const removeUserTyping = async (
+  conversationId: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+    const conversationSnap = await getDoc(conversationRef);
+
+    if (!conversationSnap.exists()) {
+      throw new Error('Conversation not found');
+    }
+
+    const typingUsers = conversationSnap.data().typingUsers || {};
+
+    // Remove this user from typing users
+    delete typingUsers[userId];
+
+    await updateDoc(conversationRef, {
+      typingUsers,
+    });
+  } catch (error) {
+    console.error('Error removing user typing:', error);
+    throw error;
+  }
+};
+
+// Listen to conversation changes (including typing indicators)
+export const listenToConversation = (
+  conversationId: string,
+  callback: (conversation: ConversationData | null) => void
+): (() => void) => {
+  const conversationRef = doc(db, CONVERSATIONS_COLLECTION, conversationId);
+
+  const unsubscribe = onSnapshot(
+    conversationRef,
+    (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        const conversation: ConversationData = {
+          id: doc.id,
+          participants: data.participants,
+          participantDetails: data.participantDetails,
+          lastMessage: data.lastMessage,
+          lastMessageTimestamp: data.lastMessageTimestamp?.toDate() || new Date(),
+          lastMessageSenderId: data.lastMessageSenderId,
+          isGroup: data.isGroup || false,
+          groupName: data.groupName,
+          groupAvatar: data.groupAvatar,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          typingUsers: data.typingUsers || {},
+        };
+        callback(conversation);
+      } else {
+        callback(null);
+      }
+    },
+    (error) => {
+      console.error('Error listening to conversation:', error);
+      callback(null);
+    }
+  );
+
+  return unsubscribe;
 };
 
 // Get Firestore instance (for advanced usage)

@@ -146,7 +146,15 @@ export const useAuth = (): UseAuthReturn => {
   // Set up auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChange((user) => {
-      console.log('🔐 Auth state changed:', user ? `User: ${user.email}` : 'No user');
+      if (user) {
+        console.log('🔐 Auth state changed: User authenticated', {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+      } else {
+        console.log('🔐 Auth state changed: No user (logged out)');
+      }
       setUser(user);
       setLoading(false);
     });

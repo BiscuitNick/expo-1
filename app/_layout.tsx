@@ -1,12 +1,16 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { createContext, useEffect, useRef } from 'react';
+import { Pressable } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuth } from '@/hooks/useAuth';
 import { createPresenceManager, PresenceManager } from '@/services/presenceService';
+
+// Create context for presence manager
+export const PresenceManagerContext = createContext<PresenceManager | null>(null);
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -46,69 +50,78 @@ export default function RootLayout() {
     }
   }, [user?.uid]);
 
+  // Record activity on any interaction
+  const handleUserInteraction = () => {
+    presenceManagerRef.current?.recordActivity();
+  };
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-        <Stack.Screen
-          name="auth/GoogleAuthScreen"
-          options={{
-            headerShown: false,
-            title: 'Sign In'
-          }}
-        />
-        <Stack.Screen
-          name="auth/LoginScreen"
-          options={{
-            headerShown: false,
-            title: 'Email Sign In'
-          }}
-        />
-        <Stack.Screen
-          name="auth/SignupScreen"
-          options={{
-            headerShown: false,
-            title: 'Sign Up'
-          }}
-        />
-        <Stack.Screen
-          name="auth/ProfileSetupScreen"
-          options={{
-            headerShown: false,
-            title: 'Complete Profile'
-          }}
-        />
-        <Stack.Screen
-          name="chat/[id]"
-          options={{
-            headerShown: true,
-            title: 'Chat'
-          }}
-        />
-        <Stack.Screen
-          name="group/create"
-          options={{
-            headerShown: true,
-            title: 'Create Group'
-          }}
-        />
-        <Stack.Screen
-          name="group/info/[id]"
-          options={{
-            headerShown: true,
-            title: 'Group Info'
-          }}
-        />
-        <Stack.Screen
-          name="group/add-members/[id]"
-          options={{
-            headerShown: true,
-            title: 'Add Members'
-          }}
-        />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <PresenceManagerContext.Provider value={presenceManagerRef.current}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Pressable style={{ flex: 1 }} onPress={handleUserInteraction}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+            <Stack.Screen
+              name="auth/GoogleAuthScreen"
+              options={{
+                headerShown: false,
+                title: 'Sign In'
+              }}
+            />
+            <Stack.Screen
+              name="auth/LoginScreen"
+              options={{
+                headerShown: false,
+                title: 'Email Sign In'
+              }}
+            />
+            <Stack.Screen
+              name="auth/SignupScreen"
+              options={{
+                headerShown: false,
+                title: 'Sign Up'
+              }}
+            />
+            <Stack.Screen
+              name="auth/ProfileSetupScreen"
+              options={{
+                headerShown: false,
+                title: 'Complete Profile'
+              }}
+            />
+            <Stack.Screen
+              name="chat/[id]"
+              options={{
+                headerShown: true,
+                title: 'Chat'
+              }}
+            />
+            <Stack.Screen
+              name="group/create"
+              options={{
+                headerShown: true,
+                title: 'Create Group'
+              }}
+            />
+            <Stack.Screen
+              name="group/info/[id]"
+              options={{
+                headerShown: true,
+                title: 'Group Info'
+              }}
+            />
+            <Stack.Screen
+              name="group/add-members/[id]"
+              options={{
+                headerShown: true,
+                title: 'Add Members'
+              }}
+            />
+          </Stack>
+          <StatusBar style="auto" />
+        </Pressable>
+      </ThemeProvider>
+    </PresenceManagerContext.Provider>
   );
 }

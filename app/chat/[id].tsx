@@ -15,7 +15,13 @@ import StatusIndicator from '../../components/StatusIndicator';
 import { useAuth } from '../../hooks/useAuth';
 import { useMessages } from '../../hooks/useMessages';
 import { useUserPresence } from '../../hooks/usePresence';
-import { getConversation, ConversationData } from '../../services/firestoreService';
+import {
+  getConversation,
+  ConversationData,
+  listenToConversation,
+  setUserTyping,
+  removeUserTyping
+} from '../../services/firestoreService';
 import { shouldShowDateSeparator } from '../../utils/dateUtils';
 
 export default function ChatScreen() {
@@ -34,16 +40,43 @@ export default function ChatScreen() {
     loadingMore,
   } = useMessages(id);
 
-  const [isTyping, setIsTyping] = useState(false);
   const [conversation, setConversation] = useState<ConversationData | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(true);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch conversation data to determine if it's a group chat
+  // Listen to conversation changes (including typing indicators)
   useEffect(() => {
     if (!id) return;
 
+    setLoadingConversation(true);
+
+    // Set up real-time listener for conversation
+    const unsubscribe = listenToConversation(id, (conv) => {
+      setConversation(conv);
+      setLoadingConversation(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [id]);
+
+  // Clean up typing indicator when user leaves
+  useEffect(() => {
+    return () => {
+      if (user?.uid && id) {
+        removeUserTyping(id, user.uid).catch((error) => {
+          console.error('Error removing typing indicator on unmount:', error);
+        });
+      }
+    };
+  }, [user?.uid, id]);
+
+  // Old fetch logic (keeping as fallback)
+  useEffect(() => {
+    if (!id || conversation) return;
+
     const fetchConversation = async () => {
-      setLoadingConversation(true);
       try {
         const conv = await getConversation(id);
         setConversation(conv);
@@ -121,6 +154,11 @@ export default function ChatScreen() {
 
   const handleSend = async (text: string) => {
     try {
+      // Remove typing indicator when sending message
+      if (user?.uid && id) {
+        await removeUserTyping(id, user.uid);
+      }
+
       await sendFirestoreMessage(text);
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -128,14 +166,42 @@ export default function ChatScreen() {
     }
   };
 
-  const handleTypingStart = () => {
-    setIsTyping(true);
-    // TODO: Send typing indicator to Firestore
+  const handleTypingStart = async () => {
+    if (!user?.uid || !id) return;
+
+    try {
+      // Set typing indicator
+      await setUserTyping(id, user.uid, user.displayName || 'Unknown');
+
+      // Clear any existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Auto-remove typing indicator after 3 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(async () => {
+        await removeUserTyping(id, user.uid);
+      }, 3000);
+    } catch (error) {
+      console.error('Error setting typing indicator:', error);
+    }
   };
 
-  const handleTypingStop = () => {
-    setIsTyping(false);
-    // TODO: Remove typing indicator from Firestore
+  const handleTypingStop = async () => {
+    if (!user?.uid || !id) return;
+
+    try {
+      // Clear timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      // Remove typing indicator
+      await removeUserTyping(id, user.uid);
+    } catch (error) {
+      console.error('Error removing typing indicator:', error);
+    }
   };
 
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
@@ -165,11 +231,28 @@ export default function ChatScreen() {
   };
 
   const renderTypingIndicator = () => {
-    if (!isTyping) return null;
+    if (!conversation?.typingUsers || !user?.uid) return null;
+
+    // Get typing users excluding the current user
+    const typingUsersList = Object.entries(conversation.typingUsers)
+      .filter(([userId]) => userId !== user.uid)
+      .map(([_, userData]) => userData.displayName);
+
+    if (typingUsersList.length === 0) return null;
+
+    // Format the typing indicator text
+    let typingText = '';
+    if (typingUsersList.length === 1) {
+      typingText = `${typingUsersList[0]} is typing...`;
+    } else if (typingUsersList.length === 2) {
+      typingText = `${typingUsersList[0]} and ${typingUsersList[1]} are typing...`;
+    } else {
+      typingText = `${typingUsersList[0]} and ${typingUsersList.length - 1} others are typing...`;
+    }
 
     return (
       <View style={styles.typingContainer}>
-        <Text style={styles.typingText}>John Doe is typing...</Text>
+        <Text style={styles.typingText}>{typingText}</Text>
       </View>
     );
   };
